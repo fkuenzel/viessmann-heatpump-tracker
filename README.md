@@ -71,4 +71,4 @@ Zählerstände werden anschließend über **Zählerstände** mit frei wählbarem
 
 ## Lizenz
 
-Noch nicht final gewählt.
+MIT – siehe [LICENSE](LICENSE). Nutzung, Veränderung und Weitergabe (auch kommerziell) sind erlaubt, solange der Copyright-Hinweis erhalten bleibt. Haftung ist ausgeschlossen.
