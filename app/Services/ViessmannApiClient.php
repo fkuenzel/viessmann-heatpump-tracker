@@ -190,6 +190,97 @@ class ViessmannApiClient
     }
 
     /**
+     * Rohdaten des Equipment-Endpoints fuer das konfigurierte Geraet abrufen
+     * (Produktname/-typ/Seriennummer stehen hier, nicht in den Features -
+     * Fabians Wunsch 30.10.2026, Sidebar-Box mit Geraete-Stammdaten).
+     * Bewusst ungemappt/roh, um beim erstmaligen Einrichten per
+     * viessmann:explore-equipment die tatsaechlichen Feldnamen zu sehen,
+     * bevor getDeviceInfo() ein festes Mapping darauf aufbaut.
+     *
+     * @return array<string, mixed>
+     */
+    public function getRawEquipmentDevices(): array
+    {
+        $uri = sprintf(
+            '/equipment/installations/%s/gateways/%s/devices',
+            config('viessmann.installation_id'),
+            config('viessmann.gateway_serial'),
+        );
+
+        $response = Http::withToken($this->getAccessToken())
+            ->get(config('viessmann.api_base') . $uri);
+
+        if ($response->failed()) {
+            throw new ViessmannApiException('Abruf der Equipment-Geraeteliste fehlgeschlagen: ' . $response->body());
+        }
+
+        return $response->json();
+    }
+
+    /**
+     * Alle Installationen des Accounts abrufen - fuer den Install-Wizard
+     * (php artisan app:install, Github-Fahrplan Abschnitt 2), der
+     * Installation-ID, Gateway-Serial und Device-ID automatisch ermitteln
+     * soll, statt sie den Nutzer manuell per API-Request nachschlagen zu
+     * lassen (die Werte stehen nirgendwo sichtbar im Viessmann-Portal).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function listInstallations(): array
+    {
+        $response = Http::withToken($this->getAccessToken())
+            ->get(config('viessmann.api_base') . '/equipment/installations');
+
+        if ($response->failed()) {
+            throw new ViessmannApiException('Abruf der Installationsliste fehlgeschlagen: ' . $response->body());
+        }
+
+        return $response->json('data', []);
+    }
+
+    /**
+     * Gateways einer Installation abrufen (Install-Wizard, siehe
+     * listInstallations()).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function listGateways(string $installationId): array
+    {
+        $uri = sprintf('/equipment/installations/%s/gateways', $installationId);
+
+        $response = Http::withToken($this->getAccessToken())
+            ->get(config('viessmann.api_base') . $uri);
+
+        if ($response->failed()) {
+            throw new ViessmannApiException('Abruf der Gateway-Liste fehlgeschlagen: ' . $response->body());
+        }
+
+        return $response->json('data', []);
+    }
+
+    /**
+     * Geraete eines Gateways abrufen (Install-Wizard, siehe
+     * listInstallations()). Im Gegensatz zu getRawEquipmentDevices() ohne
+     * Rueckgriff auf die config-Werte, da Installation-ID/Gateway-Serial
+     * im Install-Wizard zu diesem Zeitpunkt noch nicht in der .env stehen.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function listDevices(string $installationId, string $gatewaySerial): array
+    {
+        $uri = sprintf('/equipment/installations/%s/gateways/%s/devices', $installationId, $gatewaySerial);
+
+        $response = Http::withToken($this->getAccessToken())
+            ->get(config('viessmann.api_base') . $uri);
+
+        if ($response->failed()) {
+            throw new ViessmannApiException('Abruf der Geräteliste fehlgeschlagen: ' . $response->body());
+        }
+
+        return $response->json('data', []);
+    }
+
+    /**
      * Installation-Events abfragen (EventHistory-v2, siehe
      * https://api.viessmann-climatesolutions.com/documentation/services/EventHistory-v2).
      * Insbesondere eventType=feature-changed koennte rueckwirkend
@@ -260,6 +351,113 @@ class ViessmannApiClient
         }
 
         return $response->json();
+    }
+
+    /**
+     * Aktuelle Geraetestatus-Werte in einem Rutsch abrufen (analog zur
+     * ViCare-App-Seite "Geraetestatus", Fabians Wunsch 30.10.2026). Nutzt
+     * listFeatures() statt acht einzelner getFeature()-Aufrufe, um bei
+     * gleicher Aktualitaet nur einen API-Request zu brauchen - sowohl fuer
+     * die Live-Seite als auch fuer den Sync (ViessmannSyncService) genutzt.
+     *
+     * Feature-Mapping siehe Migration
+     * 2026_10_30_180000_add_device_status_fields_to_api_log_table.php.
+     *
+     * Enthaelt auch compressor_starts/compressor_hours (identisch zu
+     * compressorStatistics()-Aufruf in ViessmannSyncService) - werden hier
+     * im selben listFeatures()-Request mitgelesen statt per zusaetzlichem
+     * getFeature()-Aufruf, um pro Sync einen API-Request zu sparen.
+     *
+     * @return array{
+     *     flow_temp: ?float,
+     *     return_temp: ?float,
+     *     system_pressure: ?float,
+     *     internal_pump_status: ?string,
+     *     volumetric_flow: ?float,
+     *     secondary_flow_temp: ?float,
+     *     compressor_active: ?bool,
+     *     compressor_phase: ?string,
+     *     compressor_starts: ?int,
+     *     compressor_hours: ?float,
+     * }
+     */
+    public function getDeviceStatus(): array
+    {
+        $features = collect($this->listFeatures())->keyBy('feature');
+
+        $value = function (string $featureName, string $property = 'value') use ($features) {
+            return $features->get($featureName)['properties'][$property]['value'] ?? null;
+        };
+
+        $starts = $value('heating.compressors.0.statistics', 'starts');
+        $hours = $value('heating.compressors.0.statistics', 'hours');
+
+        return [
+            'flow_temp' => $this->toFloat($value('heating.boiler.sensors.temperature.commonSupply')),
+            'return_temp' => $this->toFloat($value('heating.sensors.temperature.return')),
+            'system_pressure' => $this->toFloat($value('heating.sensors.pressure.supply')),
+            'internal_pump_status' => $value('heating.boiler.pumps.internal', 'status'),
+            'volumetric_flow' => $this->toFloat($value('heating.sensors.volumetricFlow.allengra')),
+            'secondary_flow_temp' => $this->toFloat($value('heating.secondaryCircuit.sensors.temperature.supply')),
+            'compressor_active' => $value('heating.compressors.0', 'active'),
+            'compressor_phase' => $value('heating.compressors.0', 'phase'),
+            'compressor_starts' => $starts === null ? null : (int) $starts,
+            'compressor_hours' => $this->toFloat($hours),
+        ];
+    }
+
+    /**
+     * Geraete-Stammdaten (Produktname/-typ/Seriennummer) fuer die Sidebar-Box
+     * live aus dem Equipment-Endpoint ermitteln (Fabians Wunsch 30.10.2026).
+     * Bestaetigt per viessmann:explore-equipment (30.10.2026): die Seriennummer
+     * steht 1:1 als boilerSerial am Geraet mit deviceType=heating, der genaue
+     * App-Wortlaut "IDU-A Modular AWMIW.A1.19-V051" ist dagegen NICHT in der
+     * API enthalten (vermutlich ein interner Produktkatalog-Lookup der
+     * ViCare-App) - stattdessen wird die Produktbezeichnung aus dem Eintrag
+     * "type:product;<Name>" in den roles abgeleitet (hier z. B. "Vitocal_250A"),
+     * da das die einzige live verfuegbare Modellangabe ist. Fabians
+     * ausdrueckliche Entscheidung: lieber die (technisch etwas groebere)
+     * Live-API-Angabe als ein statischer Text.
+     *
+     * @return array{name: ?string, type: ?string, serial: ?string}
+     */
+    public function getDeviceInfo(): array
+    {
+        $devices = $this->getRawEquipmentDevices()['data'] ?? [];
+        $device = collect($devices)->firstWhere('deviceType', 'heating');
+
+        if ($device === null) {
+            return ['name' => null, 'type' => null, 'serial' => null];
+        }
+
+        $brand = $device['brand'] ?? 'Viessmann';
+        $serial = $device['boilerSerial'] ?? null;
+
+        $productRole = collect($device['roles'] ?? [])
+            ->first(fn (string $role) => str_starts_with($role, 'type:product;'));
+
+        $type = null;
+
+        if ($productRole) {
+            $raw = substr($productRole, strlen('type:product;'));
+            $readable = str_replace('_', ' ', $raw);
+            // "250A" -> "250-A" (Bindestrich vor einem einzelnen Buchstaben am Ende,
+            // analog zur offiziellen Schreibweise "Vitocal 250-A").
+            $type = preg_replace('/(\d)([A-Z])$/', '$1-$2', $readable);
+        }
+
+        $name = $type ? trim("{$brand} {$type}") : null;
+
+        return [
+            'name' => $name,
+            'type' => $type,
+            'serial' => $serial,
+        ];
+    }
+
+    private function toFloat(mixed $value): ?float
+    {
+        return $value === null ? null : (float) $value;
     }
 
     private function storeTokenResponse(array $data): void

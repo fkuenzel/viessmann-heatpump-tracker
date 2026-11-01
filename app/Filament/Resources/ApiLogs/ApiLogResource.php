@@ -30,6 +30,13 @@ use Filament\Tables\Table;
  * beides laesst sich aber ueberschreiben. Beim Bearbeiten einer
  * bestehenden Zeile werden source/day_index/timestamp nicht mehr
  * automatisch ueberschrieben - Fabian aendert direkt, was er aendern will.
+ *
+ * Seit Fabians Wunsch (30.10.2026) zusaetzlich die "Geraetestatus"-Felder
+ * (Vorlauf-/Ruecklauftemperatur, Anlagendruck, interne Pumpe, Volumenstrom,
+ * Sekundaerkreis-Vorlauftemperatur, Verdichterstatus/-Phase) - gleiche
+ * Snapshot-Logik wie Thermik/Aussentemperatur/Kompressor-Statistik, per
+ * Sync nur fuer den laufenden Tag befuellt, hier aber wie alle anderen
+ * Felder fuer jede Zeile nachtragbar/korrigierbar.
  */
 class ApiLogResource extends Resource
 {
@@ -116,6 +123,42 @@ class ApiLogResource extends Resource
                 ->numeric()
                 ->step(0.1)
                 ->suffix('h'),
+            TextInput::make('flow_temp')
+                ->label('Vorlauftemperatur')
+                ->numeric()
+                ->step(0.1)
+                ->suffix('°C'),
+            TextInput::make('return_temp')
+                ->label('Rücklauftemperatur')
+                ->numeric()
+                ->step(0.1)
+                ->suffix('°C'),
+            TextInput::make('system_pressure')
+                ->label('Anlagendruck')
+                ->numeric()
+                ->step(0.1)
+                ->suffix('bar'),
+            Select::make('internal_pump_status')
+                ->label('Interne Pumpe')
+                ->options(['on' => 'EIN', 'off' => 'AUS'])
+                ->native(false),
+            TextInput::make('volumetric_flow')
+                ->label('Volumenstrom')
+                ->numeric()
+                ->step(1)
+                ->suffix('l/h'),
+            TextInput::make('secondary_flow_temp')
+                ->label('Vorlauftemperatur Sekundärkreis')
+                ->numeric()
+                ->step(0.1)
+                ->suffix('°C'),
+            Select::make('compressor_active')
+                ->label('Verdichterstatus')
+                ->options([1 => 'EIN', 0 => 'AUS'])
+                ->native(false),
+            TextInput::make('compressor_phase')
+                ->label('Verdichter-Phase')
+                ->helperText('Roh-Status aus der API, z. B. "ready" oder "running".'),
         ]);
     }
 
@@ -184,6 +227,45 @@ class ApiLogResource extends Resource
                     ->label('Kompr.-Stunden')
                     ->numeric(decimalPlaces: 1)
                     ->suffix(' h')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('flow_temp')
+                    ->label('Vorlauf')
+                    ->numeric(decimalPlaces: 1)
+                    ->suffix(' °C')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('return_temp')
+                    ->label('Rücklauf')
+                    ->numeric(decimalPlaces: 1)
+                    ->suffix(' °C')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('system_pressure')
+                    ->label('Anlagendruck')
+                    ->numeric(decimalPlaces: 1)
+                    ->suffix(' bar')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('internal_pump_status')
+                    ->label('Int. Pumpe')
+                    ->formatStateUsing(fn (?string $state) => match ($state) {
+                        'on' => 'EIN',
+                        'off' => 'AUS',
+                        default => $state,
+                    })
+                    ->badge()
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('volumetric_flow')
+                    ->label('Volumenstrom')
+                    ->numeric(decimalPlaces: 0)
+                    ->suffix(' l/h')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('secondary_flow_temp')
+                    ->label('Vorlauf Sek.')
+                    ->numeric(decimalPlaces: 1)
+                    ->suffix(' °C')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('compressor_active')
+                    ->label('Verdichter')
+                    ->formatStateUsing(fn (?bool $state) => $state === null ? null : ($state ? 'EIN' : 'AUS'))
+                    ->badge()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('reference_date', 'desc')

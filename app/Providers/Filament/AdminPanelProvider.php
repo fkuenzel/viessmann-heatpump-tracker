@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Models\Setting;
 use App\Models\WeatherLog;
 use App\Services\ApiLogAggregationService;
 use Filament\Http\Middleware\Authenticate;
@@ -73,6 +74,18 @@ class AdminPanelProvider extends PanelProvider
                         .fi-sidebar {
                             background-color: rgb(249 250 251);
                             border-inline-end: 1px solid rgb(228 228 231);
+                            /* Sidebar bleibt beim Scrollen des Dashboard-Inhalts stehen statt
+                               mitzuscrollen (Fabians Wunsch 30.10.2026) - auf Full-HD passt die
+                               gesamte Sidebar inkl. Geraete-Stammdaten-Box ohnehin in die
+                               Bildschirmhoehe, bei kleineren Bildschirmen/mehr Nav-Punkten
+                               scrollt stattdessen nur die Sidebar selbst (overflow-y: auto).
+                               top/height beruecksichtigen die Topbar-Hoehe (Filament-Standard
+                               4rem/h-16) - ohne Abzug ragte die Sidebar mit reinem 100vh unten
+                               ueber den sichtbaren Bereich hinaus (Fabians Hinweis 30.10.2026). */
+                            position: sticky;
+                            top: 4rem;
+                            height: calc(100vh - 4rem);
+                            overflow-y: auto;
                         }
                         .dark .fi-sidebar {
                             background-color: rgb(24 24 27);
@@ -142,18 +155,9 @@ class AdminPanelProvider extends PanelProvider
                 function (): string {
                     $aggregation = app(ApiLogAggregationService::class);
                     $anlageTemp = $aggregation->lastSnapshotValue(now(), 'outdoor_temp');
-                    $kleve = WeatherLog::query()->latest('timestamp')->first();
 
                     $anlageTempFormatted = $anlageTemp !== null
                         ? number_format($anlageTemp, 1, ',', '.') . ' °C'
-                        : '–';
-
-                    $kleveTempFormatted = $kleve
-                        ? number_format((float) $kleve->temperature, 1, ',', '.') . ' °C'
-                        : '–';
-
-                    $kleveHumidityFormatted = $kleve
-                        ? number_format((float) $kleve->humidity, 0, ',', '.') . ' %'
                         : '–';
 
                     $thermometerIcon = <<<'SVG'
@@ -162,11 +166,40 @@ class AdminPanelProvider extends PanelProvider
                         </svg>
                         SVG;
 
-                    $dropletIcon = <<<'SVG'
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="fi-topbar-weather-icon">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3.5s6 6.5 6 10.5a6 6 0 0 1-12 0c0-4 6-10.5 6-10.5Z" />
-                        </svg>
-                        SVG;
+                    // Externer Teil (Open-Meteo) nur anzeigen, wenn ein Wetter-Standort
+                    // hinterlegt ist (Github-Fahrplan Abschnitt 3/4) - ohne Standort gibt
+                    // es keine weather_log-Zeilen, der Block wuerde sonst dauerhaft nur
+                    // Platzhalter-Striche zeigen.
+                    $externalBlock = '';
+
+                    if (Setting::get('weather_latitude') !== null) {
+                        $location = WeatherLog::query()->latest('timestamp')->first();
+                        $locationLabel = Setting::get('weather_location_name') ?? 'extern';
+
+                        $locationTempFormatted = $location
+                            ? number_format((float) $location->temperature, 1, ',', '.') . ' °C'
+                            : '–';
+
+                        $locationHumidityFormatted = $location
+                            ? number_format((float) $location->humidity, 0, ',', '.') . ' %'
+                            : '–';
+
+                        $dropletIcon = <<<'SVG'
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="fi-topbar-weather-icon">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 3.5s6 6.5 6 10.5a6 6 0 0 1-12 0c0-4 6-10.5 6-10.5Z" />
+                            </svg>
+                            SVG;
+
+                        $externalBlock = <<<HTML
+                            <span class="fi-topbar-weather-sep"></span>
+                            <span class="fi-topbar-weather-group" title="Außentemperatur &amp; Luftfeuchtigkeit ({$locationLabel})">
+                                {$thermometerIcon}
+                                <span>{$locationTempFormatted}</span>
+                                {$dropletIcon}
+                                <span>{$locationHumidityFormatted}</span>
+                            </span>
+                            HTML;
+                    }
 
                     return <<<HTML
                         <div class="fi-topbar-weather">
@@ -174,16 +207,22 @@ class AdminPanelProvider extends PanelProvider
                                 {$thermometerIcon}
                                 <span>{$anlageTempFormatted}</span>
                             </span>
-                            <span class="fi-topbar-weather-sep"></span>
-                            <span class="fi-topbar-weather-group" title="Außentemperatur &amp; Luftfeuchtigkeit (Kleve)">
-                                {$thermometerIcon}
-                                <span>{$kleveTempFormatted}</span>
-                                {$dropletIcon}
-                                <span>{$kleveHumidityFormatted}</span>
-                            </span>
+                            {$externalBlock}
                         </div>
                         HTML;
                 },
+            )
+            // Geraete-Stammdaten (Produktname/-typ/Seriennummer) unten in der Sidebar,
+            // analog zur "Wärmepumpe"-Detailseite in der ViCare-App (Fabians Wunsch
+            // 30.10.2026, Screenshot). Werte kommen live aus der Viessmann-API
+            // (ViessmannApiClient::getDeviceInfo()), werden aber nur einmalig beim
+            // Sync in die settings-Tabelle geschrieben (ViessmannSyncService::
+            // refreshDeviceInfo()) statt bei jedem Seitenaufruf neu abgerufen - die
+            // Sidebar liest hier nur noch die gecachten settings-Werte, read-only,
+            // kein eigenes Formular dafuer.
+            ->renderHook(
+                PanelsRenderHook::SIDEBAR_FOOTER,
+                fn (): \Illuminate\Contracts\View\View => view('filament.partials.device-info-sidebar'),
             )
             ->middleware([
                 EncryptCookies::class,

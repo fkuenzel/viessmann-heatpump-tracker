@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Models\MeterReading;
+use App\Models\PriceHistory;
 use App\Services\ApiLogAggregationService;
 use App\Services\CostCalculationService;
 use App\Services\MeterCorrectionService;
@@ -34,7 +35,7 @@ use Illuminate\Support\Carbon;
  */
 class MeterIntervalBreakdownWidget extends TableWidget
 {
-    protected static ?int $sort = 19;
+    protected static ?int $sort = 20;
 
     /**
      * Thermische Energie ist ein Tages-Snapshot ohne untertaegige Aufloesung
@@ -124,14 +125,17 @@ class MeterIntervalBreakdownWidget extends TableWidget
                 TextColumn::make('total_cost')
                     ->label('Kosten Gesamt (€)')
                     ->wrapHeader()
+                    ->visible(fn () => PriceHistory::query()->exists())
                     ->state(fn (MeterReading $record) => $this->formatEuro($this->breakdown($record)['total_cost'])),
                 TextColumn::make('heating_cost')
                     ->label('Kosten Heizen (€)')
                     ->wrapHeader()
+                    ->visible(fn () => PriceHistory::query()->exists())
                     ->state(fn (MeterReading $record) => $this->formatEuro($this->breakdown($record)['heating_cost'])),
                 TextColumn::make('dhw_cost')
                     ->label('Kosten WW (€)')
                     ->wrapHeader()
+                    ->visible(fn () => PriceHistory::query()->exists())
                     ->state(fn (MeterReading $record) => $this->formatEuro($this->breakdown($record)['dhw_cost'])),
                 TextColumn::make('thermal_kwh')
                     ->label('Thermische Energie (kWh)')

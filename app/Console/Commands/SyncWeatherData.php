@@ -13,6 +13,16 @@ class SyncWeatherData extends Command
 
     public function handle(WeatherSyncService $service): int
     {
+        if (! $service->isLocationConfigured()) {
+            // Still ueberspringen statt Fehler - typischer Fall direkt nach
+            // der Installation, bevor ein Wetter-Standort hinterlegt wurde
+            // (Github-Fahrplan Abschnitt 4). Kein Log-Fehler, da das kein
+            // Ausfall ist, sondern ein erwarteter Zustand.
+            $this->info('Kein Wetter-Standort konfiguriert - Sync übersprungen.');
+
+            return self::SUCCESS;
+        }
+
         $service->sync();
 
         $this->info('Wetter-Sync abgeschlossen.');

@@ -6,20 +6,25 @@ use App\Models\MeterReading;
 use App\Services\MeterCorrectionService;
 use Filament\Support\RawJs;
 use Filament\Widgets\ChartWidget;
+use Illuminate\Contracts\Support\Htmlable;
 
 /**
  * Vergleicht pro Ablese-Intervall den realen Zaehler-Verbrauch (Differenz
  * zwischen zwei MeterReading-Eintraegen) mit dem ueber die Viessmann-API
- * ermittelten Verbrauch im selben Zeitraum, plus die Abweichung in Prozent
- * (MeterCorrectionService, bisher nur ueber das Hilfs-Command
- * report:meter-interval abrufbar, siehe Fahrplan Phase 4).
+ * ermittelten Verbrauch im selben Zeitraum (MeterCorrectionService, bisher
+ * nur ueber das Hilfs-Command report:meter-interval abrufbar, siehe
+ * Fahrplan Phase 4).
+ *
+ * Ersetzt seit Fabians Wunsch (30.10.2026) das fruehere
+ * MeterDeviationChartWidget, das zusaetzlich die Abweichung in % auf einer
+ * zweiten y-Achse zeigte - zwei Achsen gleichzeitig (kWh links, % rechts)
+ * waren schwer lesbar, siehe Schwester-Widget
+ * MeterDeviationPercentChartWidget fuer die Abweichung als eigenes Chart
+ * mit eigener Achse.
  *
  * Zaehlerstaende fallen nur unregelmaessig an (keine Tagesgranularitaet wie
  * bei den anderen Chart-Widgets), daher ein Balkendiagramm pro Intervall
- * statt einer Zeitreihe. Die Abweichung wird als Linie auf einer zweiten
- * y-Achse ueber die Balken gelegt (Fabians Wunsch, 29.10.2026 - ein
- * gemeinsames Widget statt getrennter Widgets fuer Verbrauch und
- * Abweichung).
+ * statt einer Zeitreihe.
  *
  * Achtung bei der Lesart (Fabians Review 29.10.2026): die Balken sind gleich
  * breit dargestellt, obwohl die Intervalle unterschiedlich lang sind (hier
@@ -29,22 +34,27 @@ use Filament\Widgets\ChartWidget;
  * Intervall-Dauer stattdessen im Tooltip mit angezeigt (afterTitle), damit
  * man die Werte nicht ohne diesen Kontext vergleicht.
  *
- * Farbgebung seit Fabians Wunsch (30.10.2026): beide Balken bilden
- * Stromverbrauch ab (Zaehler vs. App-Meldung) und bekommen daher die gruene
- * Farbfamilie der App (siehe ConsumptionChartWidget), unterschieden ueber
- * Helligkeit. Die Abweichungs-Linie auf der zweiten Achse bleibt bewusst in
- * der Rot-Orange-Highlight-Farbe (--vic-color__highlight: #cc2c08), damit
- * sie sich von den beiden Balken klar abhebt statt in der Gruenfamilie
- * unterzugehen.
+ * Farbgebung: beide Balken bilden Stromverbrauch ab (Zaehler vs.
+ * App-Meldung) und bekommen daher die gruene Farbfamilie der App (siehe
+ * ConsumptionChartWidget), unterschieden ueber Helligkeit.
+ *
+ * Durchschnitt (Fabians Wunsch, 30.10.2026): dieses Widget hat keinen
+ * Zeitraum-Filter wie die taeglichen Charts (es zeigt alle bisherigen
+ * Ablese-Intervalle), daher kein "Vorzeitraum"-Vergleich wie bei
+ * TotalConsumptionChartWidget & Co. Stattdessen in der Beschreibung ein
+ * ueber alle Intervalle gewichteter Tagesdurchschnitt (Summe Verbrauch /
+ * Summe Intervall-Tage) fuer Zaehler und App - eine einfache Mittelung der
+ * Intervallwerte waere durch die unterschiedlich langen Intervalle
+ * verzerrt (siehe Hinweis zur Balkenbreite oben).
  */
-class MeterDeviationChartWidget extends ChartWidget
+class MeterConsumptionBarChartWidget extends ChartWidget
 {
     protected static ?int $sort = 18;
 
-    protected ?string $heading = 'Energie Verbrauch (Zähler) & App-Abweichung';
+    protected ?string $heading = 'Verbrauch je Ablese-Intervall';
 
-    // Halbe Breite (Dashboard-Grid hat 2 Spalten) - reiht sich damit neben
-    // die anderen drei Chart-Widgets ein (Abschnitt 4.18).
+    // Halbe Breite (Dashboard-Grid hat 2 Spalten) - steht neben
+    // MeterDeviationPercentChartWidget in derselben Zeile.
     protected int | string | array $columnSpan = 1;
 
     /**
@@ -57,6 +67,11 @@ class MeterDeviationChartWidget extends ChartWidget
      */
     protected array $intervalDurations = [];
 
+    /**
+     * @var array{meter: ?float, app: ?float}|null
+     */
+    private ?array $averagesCache = null;
+
     public function getMaxHeight(): ?string
     {
         return '300px';
@@ -65,6 +80,63 @@ class MeterDeviationChartWidget extends ChartWidget
     protected function getType(): string
     {
         return 'bar';
+    }
+
+    public function getDescription(): string | Htmlable | null
+    {
+        $averages = $this->averages();
+
+        if ($averages['meter'] === null && $averages['app'] === null) {
+            return null;
+        }
+
+        $meterFormatted = $averages['meter'] !== null
+            ? number_format($averages['meter'], 2, ',', '.') . ' kWh/Tag'
+            : '–';
+        $appFormatted = $averages['app'] !== null
+            ? number_format($averages['app'], 2, ',', '.') . ' kWh/Tag'
+            : '–';
+
+        return 'Ø Zähler: ' . $meterFormatted . ' · Ø App: ' . $appFormatted;
+    }
+
+    /**
+     * Gewichteter Tagesdurchschnitt ueber alle Ablese-Intervalle - siehe
+     * Klassen-Docblock fuer die Begruendung der Gewichtung.
+     *
+     * @return array{meter: ?float, app: ?float}
+     */
+    private function averages(): array
+    {
+        if ($this->averagesCache !== null) {
+            return $this->averagesCache;
+        }
+
+        $correction = app(MeterCorrectionService::class);
+        $readings = MeterReading::query()->orderBy('timestamp')->get();
+
+        $meterTotal = 0.0;
+        $appTotal = 0.0;
+        $daysTotal = 0.0;
+
+        foreach ($readings as $index => $reading) {
+            if ($index === 0) {
+                continue;
+            }
+
+            $previous = $readings[$index - 1];
+            $result = $correction->calculate($previous, $reading);
+            $days = $previous->timestamp->diffInSeconds($reading->timestamp) / 86400;
+
+            $meterTotal += $result['meter_kwh'];
+            $appTotal += $result['api_kwh'] ?? 0.0;
+            $daysTotal += $days;
+        }
+
+        return $this->averagesCache = [
+            'meter' => $daysTotal > 0 ? $meterTotal / $daysTotal : null,
+            'app' => $daysTotal > 0 ? $appTotal / $daysTotal : null,
+        ];
     }
 
     protected function getData(): array
@@ -76,7 +148,6 @@ class MeterDeviationChartWidget extends ChartWidget
         $labels = [];
         $meterValues = [];
         $apiValues = [];
-        $deviationValues = [];
         $this->intervalDurations = [];
 
         foreach ($readings as $index => $reading) {
@@ -91,41 +162,19 @@ class MeterDeviationChartWidget extends ChartWidget
             $meterValues[] = $result['meter_kwh'];
             $apiValues[] = $result['api_kwh'];
             $this->intervalDurations[] = round($previous->timestamp->diffInSeconds($reading->timestamp) / 86400, 2);
-
-            // Bewusst nicht result['difference_percent'] (das ist die
-            // umgekehrte Perspektive meter/api aus Phase 4) - hier soll
-            // "App-Abweichung" exakt wie in Fabians Excel die Abweichung der
-            // App VOM Zaehler ausdruecken: (App - Zaehler) / Zaehler * 100.
-            $deviationValues[] = ($result['api_kwh'] !== null && $result['meter_kwh'] > 0)
-                ? round((($result['api_kwh'] - $result['meter_kwh']) / $result['meter_kwh']) * 100, 2)
-                : null;
         }
 
         return [
             'datasets' => [
                 [
-                    'type' => 'bar',
                     'label' => 'Verbrauch Zähler (kWh)',
                     'data' => $meterValues,
                     'backgroundColor' => '#43a047',
-                    'yAxisID' => 'y',
                 ],
                 [
-                    'type' => 'bar',
                     'label' => 'Verbrauch App (kWh)',
                     'data' => $apiValues,
                     'backgroundColor' => '#81c784',
-                    'yAxisID' => 'y',
-                ],
-                [
-                    'type' => 'line',
-                    'label' => 'Abweichung Zähler ↔ App (%)',
-                    'data' => $deviationValues,
-                    'borderColor' => '#cc2c08',
-                    'backgroundColor' => '#cc2c08',
-                    'fill' => false,
-                    'yAxisID' => 'y1',
-                    'tension' => 0.2,
                 ],
             ],
             'labels' => $labels,
@@ -159,20 +208,8 @@ class MeterDeviationChartWidget extends ChartWidget
             },
             scales: {
                 y: {
-                    type: 'linear',
-                    position: 'left',
                     ticks: {
                         callback: (value) => value + ' kWh',
-                    },
-                },
-                y1: {
-                    type: 'linear',
-                    position: 'right',
-                    grid: {
-                        drawOnChartArea: false,
-                    },
-                    ticks: {
-                        callback: (value) => value + ' %',
                     },
                 },
             },

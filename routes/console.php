@@ -19,3 +19,12 @@ Schedule::command('viessmann:sync')
 Schedule::command('weather:sync')
     ->hourly()
     ->withoutOverlapping();
+
+// Taeglicher Archiv-Nachtrag (Fabians Entscheidung, 30.10.2026): holt nachts
+// den soeben abgeschlossenen Vortag aus Open-Meteos Historical-Weather-API
+// nach (WeatherSyncService::backfillArchive(), Seite "Temperaturvergleich") -
+// robuster als die reinen live_snapshot-Zeilen aus weather:sync, da
+// unabhaengig davon, ob der lokale Scheduler zum jeweiligen Zeitpunkt lief.
+Schedule::command('weather:backfill-archive')
+    ->dailyAt('01:00')
+    ->withoutOverlapping();

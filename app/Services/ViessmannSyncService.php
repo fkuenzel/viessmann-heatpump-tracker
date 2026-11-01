@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\ApiLog;
+use App\Models\Setting;
 use Illuminate\Support\Carbon;
 
 /**
@@ -14,6 +15,15 @@ use Illuminate\Support\Carbon;
  * Produktion (heat.production.summary), Aussentemperatur und Kompressor-
  * Statistik liefern nur einen aktuellen Snapshot (kein day[]-Array) und
  * werden deshalb ausschliesslich bei day_index 0 mitgeschrieben.
+ *
+ * Seit Fabians Wunsch (30.10.2026) zusaetzlich die "Geraetestatus"-Werte
+ * (Vorlauf-/Ruecklauftemperatur, Anlagendruck, interne Pumpe, Volumenstrom,
+ * Sekundaerkreis-Vorlauftemperatur, Verdichterstatus) - gleiche Snapshot-
+ * Charakteristik, ueber ViessmannApiClient::getDeviceStatus() in einem
+ * einzigen zusaetzlichen API-Request abgerufen. Dieselben Werte liest auch
+ * die Live-Seite App\Filament\Pages\DeviceStatus direkt per API ab, ohne
+ * den Umweg ueber api_log - die hier gespeicherte Kopie dient nur der
+ * spaeteren Historisierung/Verlaufsdarstellung.
  */
 class ViessmannSyncService
 {
@@ -52,7 +62,20 @@ class ViessmannSyncService
         $thermalHeating = $this->currentDayValue('heating.heat.production.summary.heating');
         $thermalDhw = $this->currentDayValue('heating.heat.production.summary.dhw');
         $outdoorTemp = $this->sensorValue('heating.sensors.temperature.outside');
-        $compressor = $this->compressorStatistics();
+
+        // Geraetestatus-Werte (Vorlauf/Ruecklauf/Druck/Pumpe/Volumenstrom/
+        // Sekundaerkreis/Verdichterstatus, Fabians Wunsch 30.10.2026) - wie
+        // Thermik/Aussentemperatur/Kompressor-Statistik ein reiner Snapshot
+        // ohne day[]-Array, deshalb nur fuer day_index=0 geschrieben (siehe
+        // Migration 2026_10_30_180000_add_device_status_fields_to_api_log_table).
+        // Enthaelt auch compressor_starts/compressor_hours - ersetzt den
+        // vorherigen separaten compressorStatistics()-Aufruf (ein
+        // API-Request weniger pro Sync, siehe
+        // ViessmannApiClient::getDeviceStatus()-Docblock).
+        $deviceStatus = $this->client->getDeviceStatus();
+        $compressor = ['starts' => $deviceStatus['compressor_starts'], 'hours' => $deviceStatus['compressor_hours']];
+
+        $this->refreshDeviceInfo();
 
         $written = 0;
 
@@ -113,6 +136,14 @@ class ViessmannSyncService
                 'outdoor_temp' => $dayIndex === 0 ? $outdoorTemp : null,
                 'compressor_starts' => $dayIndex === 0 ? ($compressor['starts'] ?? null) : null,
                 'compressor_hours' => $dayIndex === 0 ? ($compressor['hours'] ?? null) : null,
+                'flow_temp' => $dayIndex === 0 ? $deviceStatus['flow_temp'] : null,
+                'return_temp' => $dayIndex === 0 ? $deviceStatus['return_temp'] : null,
+                'system_pressure' => $dayIndex === 0 ? $deviceStatus['system_pressure'] : null,
+                'internal_pump_status' => $dayIndex === 0 ? $deviceStatus['internal_pump_status'] : null,
+                'volumetric_flow' => $dayIndex === 0 ? $deviceStatus['volumetric_flow'] : null,
+                'secondary_flow_temp' => $dayIndex === 0 ? $deviceStatus['secondary_flow_temp'] : null,
+                'compressor_active' => $dayIndex === 0 ? $deviceStatus['compressor_active'] : null,
+                'compressor_phase' => $dayIndex === 0 ? $deviceStatus['compressor_phase'] : null,
             ]);
 
             $written++;
@@ -158,6 +189,38 @@ class ViessmannSyncService
     }
 
     /**
+     * Geraete-Stammdaten (Produktname/-typ/Seriennummer) fuer die
+     * Sidebar-Box aus settings aktualisieren (Fabians Wunsch 30.10.2026,
+     * siehe ViessmannApiClient::getDeviceInfo()-Docblock). Bewusst nur
+     * einmalig befuellt statt bei jedem Sync neu von der API geholt -
+     * diese Werte aendern sich bei einer einmal installierten Anlage
+     * praktisch nie, ein zusaetzlicher API-Request pro Sync (der Scheduler
+     * laeuft haeufig) waere fuer unveraenderliche Stammdaten unnoetig.
+     * Ueber Loeschen der drei settings-Zeilen laesst sich ein erneuter
+     * Abruf erzwingen, falls sich am Geraet doch einmal etwas aendert.
+     */
+    private function refreshDeviceInfo(): void
+    {
+        if (Setting::get('viessmann_device_serial') !== null) {
+            return;
+        }
+
+        $info = $this->client->getDeviceInfo();
+
+        if ($info['name'] !== null) {
+            Setting::set('viessmann_device_name', $info['name']);
+        }
+
+        if ($info['type'] !== null) {
+            Setting::set('viessmann_device_type', $info['type']);
+        }
+
+        if ($info['serial'] !== null) {
+            Setting::set('viessmann_device_serial', $info['serial']);
+        }
+    }
+
+    /**
      * @return array<int, float> day_index => Wert in kWh
      */
     private function dayArray(string $featureName): array
@@ -182,21 +245,5 @@ class ViessmannSyncService
         $value = $properties['value']['value'] ?? null;
 
         return $value === null ? null : (float) $value;
-    }
-
-    /**
-     * @return array{starts: ?int, hours: ?float}
-     */
-    private function compressorStatistics(): array
-    {
-        $properties = $this->client->getFeature('heating.compressors.0.statistics')['properties'] ?? [];
-
-        $starts = $properties['starts']['value'] ?? null;
-        $hours = $properties['hours']['value'] ?? null;
-
-        return [
-            'starts' => $starts === null ? null : (int) $starts,
-            'hours' => $hours === null ? null : (float) $hours,
-        ];
     }
 }

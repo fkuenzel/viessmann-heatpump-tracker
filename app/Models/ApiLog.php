@@ -24,6 +24,14 @@ class ApiLog extends Model
         'outdoor_temp',
         'compressor_starts',
         'compressor_hours',
+        'flow_temp',
+        'return_temp',
+        'system_pressure',
+        'internal_pump_status',
+        'volumetric_flow',
+        'secondary_flow_temp',
+        'compressor_active',
+        'compressor_phase',
     ];
 
     protected function casts(): array
@@ -40,6 +48,12 @@ class ApiLog extends Model
             'outdoor_temp' => 'decimal:2',
             'compressor_starts' => 'integer',
             'compressor_hours' => 'decimal:2',
+            'flow_temp' => 'decimal:2',
+            'return_temp' => 'decimal:2',
+            'system_pressure' => 'decimal:2',
+            'volumetric_flow' => 'decimal:1',
+            'secondary_flow_temp' => 'decimal:2',
+            'compressor_active' => 'boolean',
         ];
     }
 

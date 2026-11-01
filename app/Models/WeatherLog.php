@@ -15,6 +15,11 @@ class WeatherLog extends Model
         'timestamp',
         'temperature',
         'humidity',
+        // 'live_snapshot' (stuendlicher Snapshot via weather:sync) oder
+        // 'archive_daily' (konsolidierter Tagesmittelwert aus Open-Meteos
+        // Historical-Weather-API via weather:backfill-archive) - siehe
+        // Migration 2026_10_30_190000_add_source_to_weather_log_table.
+        'source',
     ];
 
     protected function casts(): array

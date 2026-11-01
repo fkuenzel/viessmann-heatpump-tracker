@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Models\MeterReading;
+use App\Models\PriceHistory;
 use App\Services\ApiLogAggregationService;
 use App\Services\CostCalculationService;
 use App\Services\MeterCorrectionService;
@@ -95,13 +96,22 @@ class MeterTotalsWidget extends StatsOverviewWidget
 
         $averageCop = ($hasThermal && $totalMeterKwh > 0) ? $totalThermalKwh / $totalMeterKwh : null;
 
-        return [
+        $stats = [
             Stat::make('Gesamtverbrauch (Zähler)', number_format($totalMeterKwh, 2, ',', '.') . ' kWh')
                 ->description('seit ' . $readings->first()->timestamp->format('d.m.Y')),
-            Stat::make('Gesamtkosten', $hasCost ? number_format($totalCost, 2, ',', '.') . ' €' : '–'),
-            Stat::make('Thermische Energie gesamt', $hasThermal ? number_format($totalThermalKwh, 2, ',', '.') . ' kWh' : '–'),
-            Stat::make('Ø COP gesamt', $averageCop !== null ? number_format($averageCop, 2, ',', '.') : '–'),
         ];
+
+        // Kosten-Kachel nur anzeigen, wenn ueberhaupt ein Stromtarif
+        // hinterlegt ist (Github-Fahrplan Abschnitt 4) - ohne Tarif waere
+        // hier dauerhaft nur ein Platzhalter-Strich zu sehen.
+        if (PriceHistory::query()->exists()) {
+            $stats[] = Stat::make('Gesamtkosten', $hasCost ? number_format($totalCost, 2, ',', '.') . ' €' : '–');
+        }
+
+        $stats[] = Stat::make('Thermische Energie gesamt', $hasThermal ? number_format($totalThermalKwh, 2, ',', '.') . ' kWh' : '–');
+        $stats[] = Stat::make('Ø COP gesamt', $averageCop !== null ? number_format($averageCop, 2, ',', '.') : '–');
+
+        return $stats;
     }
 
     /**
