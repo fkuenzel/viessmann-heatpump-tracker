@@ -1,9 +1,16 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/laravel",
+    "name": "fkuenzel/viessmann-heatpump-tracker",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
-    "keywords": ["laravel", "framework"],
+    "description": "Laravel-/Filament-Anwendung zur Nachverfolgung einer Viessmann-Waermepumpe (Stromverbrauch, thermische Energie, COP, Zaehlerstaende, Wetterdaten) ueber die offizielle Viessmann-API.",
+    "keywords": [
+        "laravel",
+        "filament",
+        "viessmann",
+        "heatpump",
+        "waermepumpe",
+        "home-automation"
+    ],
     "license": "MIT",
     "require": {
         "php": "^8.2",

@@ -1,4 +1,4 @@
-# Viessmann Wärmepumpen-Dashboard
+# Viessmann Heatpump Tracker
 
 Laravel-/Filament-Anwendung zur Nachverfolgung einer Viessmann-Wärmepumpe (getestet mit der Vitocal 250A, E3-Generation) über die offizielle Viessmann-API. Erfasst Stromverbrauch, thermische Energieabgabe, COP, echte Zählerstände samt Kostenberechnung und externe Wetterdaten – als Ersatz für eine manuell gepflegte Excel-Tabelle.
 
