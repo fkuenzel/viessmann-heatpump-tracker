@@ -4,17 +4,6 @@ Laravel-/Filament-Anwendung zur Nachverfolgung einer Viessmann-Wärmepumpe (gete
 
 Kein Dauer-Server nötig: Die Anwendung ist für lokalen Betrieb ausgelegt, der Datenabruf funktioniert sowohl automatisch über den Scheduler als auch jederzeit manuell per Button in der Oberfläche.
 
-## Verwendete Technologien
-
-- **[Laravel 12](https://laravel.com/)** – PHP-Framework (Eloquent ORM, Scheduler, Mail)
-- **[Filament 5](https://filamentphp.com/)** – komplette Admin-/Reporting-Oberfläche (Resources, Pages, Widgets), kein eigenes Frontend
-- **SQLite** – Standard-Datenbank für den lokalen Single-User-Betrieb; dank Eloquent-Migrationen jederzeit auf MySQL/MariaDB umstellbar
-- **[Viessmann API](https://developer.viessmann-climatesolutions.com/)** – OAuth2 (Authorization Code + PKCE) für Zugriff auf die Wärmepumpen-Messwerte
-- **[Open-Meteo](https://open-meteo.com/)** – kostenlose Wetter-, Prognose-, Archiv- und Geocoding-API, kein API-Key nötig
-- **Chart.js** (über Filaments Chart-Widgets) – Diagramme für Verbrauch, COP und Temperaturvergleich
-- **Tailwind CSS** – Styling-Grundlage von Filament
-- **Guzzle** – HTTP-Client für die Viessmann-API-Anbindung
-
 ## Voraussetzungen
 
 - PHP 8.2 oder neuer, Composer
@@ -79,6 +68,17 @@ Zählerstände werden anschließend über **Zählerstände** mit frei wählbarem
 
 - Die Viessmann-API liefert Thermik-/Außentemperatur-/Kompressorwerte nur als aktuellen Tages-Snapshot (keine Nachhol-Funktion wie beim Stromverbrauch). Lücken durch Ausfallzeiten lassen sich über **Anlagenwerte** manuell nachtragen, sofern die entsprechenden Werte noch in der Viessmann-App einsehbar sind.
 - Eine feinere zeitliche Auflösung pro Kompressor sowie die API-eigene COP-Berechnung sind nur im kostenpflichtigen Advanced-Plan verfügbar, der aktuell nicht buchbar ist.
+
+## Verwendete Technologien
+
+- **[Laravel 12](https://laravel.com/)** – PHP-Framework (Eloquent ORM, Scheduler, Mail)
+- **[Filament 5](https://filamentphp.com/)** – komplette Admin-/Reporting-Oberfläche (Resources, Pages, Widgets), kein eigenes Frontend
+- **SQLite** – Standard-Datenbank für den lokalen Single-User-Betrieb; dank Eloquent-Migrationen jederzeit auf MySQL/MariaDB umstellbar
+- **[Viessmann API](https://developer.viessmann-climatesolutions.com/)** – OAuth2 (Authorization Code + PKCE) für Zugriff auf die Wärmepumpen-Messwerte
+- **[Open-Meteo](https://open-meteo.com/)** – kostenlose Wetter-, Prognose-, Archiv- und Geocoding-API, kein API-Key nötig
+- **Chart.js** (über Filaments Chart-Widgets) – Diagramme für Verbrauch, COP und Temperaturvergleich
+- **Tailwind CSS** – Styling-Grundlage von Filament
+- **Guzzle** – HTTP-Client für die Viessmann-API-Anbindung
 
 ## Lizenz
 
