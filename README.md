@@ -4,6 +4,17 @@ Laravel-/Filament-Anwendung zur Nachverfolgung einer Viessmann-Wärmepumpe (gete
 
 Kein Dauer-Server nötig: Die Anwendung ist für lokalen Betrieb ausgelegt, der Datenabruf funktioniert sowohl automatisch über den Scheduler als auch jederzeit manuell per Button in der Oberfläche.
 
+## Verwendete Technologien
+
+- **[Laravel 12](https://laravel.com/)** – PHP-Framework (Eloquent ORM, Scheduler, Mail)
+- **[Filament 5](https://filamentphp.com/)** – komplette Admin-/Reporting-Oberfläche (Resources, Pages, Widgets), kein eigenes Frontend
+- **SQLite** – Standard-Datenbank für den lokalen Single-User-Betrieb; dank Eloquent-Migrationen jederzeit auf MySQL/MariaDB umstellbar
+- **[Viessmann API](https://developer.viessmann-climatesolutions.com/)** – OAuth2 (Authorization Code + PKCE) für Zugriff auf die Wärmepumpen-Messwerte
+- **[Open-Meteo](https://open-meteo.com/)** – kostenlose Wetter-, Prognose-, Archiv- und Geocoding-API, kein API-Key nötig
+- **Chart.js** (über Filaments Chart-Widgets) – Diagramme für Verbrauch, COP und Temperaturvergleich
+- **Tailwind CSS** – Styling-Grundlage von Filament
+- **Guzzle** – HTTP-Client für die Viessmann-API-Anbindung
+
 ## Voraussetzungen
 
 - PHP 8.2 oder neuer, Composer
