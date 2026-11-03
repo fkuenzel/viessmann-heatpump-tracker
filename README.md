@@ -69,6 +69,69 @@ Zählerstände werden anschließend über **Zählerstände** mit frei wählbarem
 - Die Viessmann-API liefert Thermik-/Außentemperatur-/Kompressorwerte nur als aktuellen Tages-Snapshot (keine Nachhol-Funktion wie beim Stromverbrauch). Lücken durch Ausfallzeiten lassen sich über **Anlagenwerte** manuell nachtragen, sofern die entsprechenden Werte noch in der Viessmann-App einsehbar sind.
 - Eine feinere zeitliche Auflösung pro Kompressor sowie die API-eigene COP-Berechnung sind nur im kostenpflichtigen Advanced-Plan verfügbar, der aktuell nicht buchbar ist.
 
+## Sicherheit beim produktiven Betrieb
+
+Diese Anwendung wird mit echten Zugangsdaten (Viessmann-OAuth-Tokens, ggf. SMTP-Zugang) und personenbezogenen Zählerdaten betrieben und ist für den Einsatz auf gewöhnlichem Webspace gedacht. Vor der öffentlichen Erreichbarkeit unbedingt beachten:
+
+- **`APP_ENV=production` und `APP_DEBUG=false`** in der `.env` setzen. Bei `APP_DEBUG=true` zeigt Laravel bei Fehlern Stacktraces inklusive `.env`-Werten öffentlich an. `php artisan app:install` prüft das automatisch und warnt, falls `APP_ENV=production` gesetzt ist, aber `APP_DEBUG` noch `true` steht.
+- **HTTPS durchgängig verwenden**: `APP_URL` mit `https://` und `SESSION_SECURE_COOKIE=true` setzen, sonst werden Session-Cookies auch unverschlüsselt übertragen. Wird ebenfalls vom Install-Wizard geprüft.
+- **Document Root muss auf `/public` zeigen**, nicht auf das Projekt-Root – bei Shared-Hosting ohne eigenen vHost ein häufiger Fehler. Eine `.htaccess` im Projekt-Root verweigert als zusätzliches Sicherheitsnetz den direkten Zugriff auf `.env`, `storage/`, `database/` und `vendor/`, falls die Document-Root-Konfiguration dennoch falsch ist – ersetzt aber nicht die korrekte Konfiguration.
+- **`database.sqlite` enthält personenbezogene Zählerdaten** und gehört entsprechend ins Backup-/Zugriffskonzept. Die Viessmann-OAuth-Tokens darin werden verschlüsselt abgelegt (`Setting::setEncrypted()`), sind also bei einem reinen Dateizugriff nicht direkt verwertbar.
+- Vor jedem Release `composer audit` laufen lassen und Dependabot (oder vergleichbar) im GitHub-Repo aktivieren.
+
+## Deployment auf Webspace ohne SSH (z. B. ALL-INKL)
+
+Einige Webspace-Anbieter (z. B. ALL-INKL-Tarife ohne SSH-Zugang) bieten weder eine Shell noch Composer, sondern nur FTP und Cronjobs als reinen HTTPS-URL-Aufruf. Composer-Install und Artisan-Befehle laufen in diesem Fall lokal, der fertige Stand (inklusive `vendor/`) wird per FTP hochgeladen.
+
+### Einmalige Einrichtung
+
+1. Lokal `composer install --no-dev --optimize-autoloader` ausführen.
+2. Projekt per FTP hochladen, Document Root der (Sub-)Domain im Hoster-Kontrollzentrum auf `public/` setzen, der restliche Code bleibt oberhalb davon und ist damit nicht direkt web-erreichbar.
+3. `.env` direkt auf dem Server anlegen (nicht aus dem lokalen `.env.example` per FTP überschreiben lassen) mit mindestens: `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL=https://...`, `SESSION_SECURE_COOKIE=true`, echtem `ARTISAN_RUNNER_TOKEN` (siehe `.env.example`).
+4. Einmalig die lokale `database/database.sqlite` per FTP hochladen (initialer Umzug des bisherigen Standes) – danach ist die Server-Version die alleinige Quelle der Wahrheit, siehe "Datenbank-Workflow" unten.
+5. `https://<domain>/system/run/storage-link?token=<ARTISAN_RUNNER_TOKEN>` einmal im Browser aufrufen.
+
+### Artisan-Runner statt CLI
+
+Ohne Shell gibt es keinen `php artisan`-Zugriff auf dem Server. Stattdessen führt `GET /system/run/{command}?token=...` (`App\Http\Controllers\ArtisanRunnerController`) einen von wenigen fest whitelisteten Befehlen aus:
+
+| URL-Segment | Artisan-Befehl |
+|---|---|
+| `schedule-run` | `schedule:run` (siehe unten) |
+| `db-backup` | `db:backup` |
+| `migrate` | `migrate --force` |
+| `config-clear` | `config:clear` |
+| `cache-clear` | `cache:clear` |
+| `storage-link` | `storage:link` |
+| `weather-backfill-archive` | `weather:backfill-archive` |
+
+Ohne gültigen `token`-Parameter (muss exakt `ARTISAN_RUNNER_TOKEN` aus der `.env` entsprechen) antwortet die Route mit 401, ohne gesetztes `ARTISAN_RUNNER_TOKEN` mit 404 – der Endpoint ist dann vollständig deaktiviert. Zusätzlich empfiehlt sich, beim Hoster für die Cronjob-URL HTTP-Basic-Auth zu hinterlegen (bei ALL-INKL direkt in der Cronjob-Verwaltung möglich), damit selbst ein durchgesickertes Token allein nicht reicht.
+
+### Scheduler-Ersatz per Webcron
+
+Da es keinen System-Cron gibt, übernimmt ein Webcron-Aufruf auf `schedule-run` die Rolle von `php artisan schedule:run`:
+
+```
+https://<domain>/system/run/schedule-run?token=<ARTISAN_RUNNER_TOKEN>
+```
+
+Beim Hoster als Cronjob **alle 5 Minuten, exakt auf volle 5-Minuten-Marken** (:00, :05, :10, ...) einrichten – kleiner oder gleich dem kleinsten in `routes/console.php` definierten Intervall (aktuell 15 Minuten für `viessmann:sync`). Laravel entscheidet bei jedem Aufruf selbst, welche der in `routes/console.php` hinterlegten Jobs gerade fällig sind.
+
+Ein tägliches Backup der SQLite-Datenbank läuft über denselben Mechanismus als eigener Cronjob (empfohlen: einmal täglich, außerhalb der Hauptnutzungszeit):
+
+```
+https://<domain>/system/run/db-backup?token=<ARTISAN_RUNNER_TOKEN>
+```
+
+Legt eine Kopie unter `storage/app/backups/` ab und entfernt automatisch Kopien älter als 30 Tage (`--keep-days` anpassbar).
+
+### Datenbank-Workflow (lokal ↔ Server)
+
+- Die Server-`database.sqlite` ist nach dem initialen Upload die alleinige Quelle der Wahrheit. **Nicht** wiederholt zum Testen herunterladen und unverändert wieder hochladen – das überschreibt zwischenzeitlich gesammelte Live-Daten.
+- Neue Migrationen: lokal entwickeln und testen (idealerweise gegen eine zuvor heruntergeladene, rein lesend genutzte Kopie der Live-Datenbank), per FTP hochladen, anschließend `.../system/run/migrate?token=...` aufrufen.
+- Frischer Stand zum lokalen Debuggen: Server-`database.sqlite` per FTP herunterladen, nur lesend lokal verwenden.
+- Viessmann-OAuth: Redirect-URI im Developer-Portal auf `https://<domain>/viessmann/callback` umstellen bzw. ergänzen und einmalig `https://<domain>/viessmann/connect` aufrufen, um die Tokens für die neue Domain neu auszustellen.
+
 ## Verwendete Technologien
 
 - **[Laravel 12](https://laravel.com/)** – PHP-Framework (Eloquent ORM, Scheduler, Mail)

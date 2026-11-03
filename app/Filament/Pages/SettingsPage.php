@@ -28,6 +28,17 @@ use Filament\Schemas\Schema;
  * Betreiber als eine reine Koordinaten-Eingabe). Ohne hinterlegten
  * Standort bleiben die davon abhaengigen Seiten/Widgets ausgeblendet
  * (siehe App\Filament\Pages\WeatherData, Fahrplan Abschnitt 4).
+ *
+ * device_status_sync_interval_hours (Fabians Einwand, 03.11.2026, siehe
+ * App\Services\ViessmannSyncService-Docblock): optionaler Mindestabstand
+ * fuer die Geraetestatus-Historisierung in api_log, Default 0 = jeder
+ * 15-Minuten-Sync (Ausgangszustand). Bewusst NICHT standardmaessig auf ein
+ * groesseres Intervall gestellt, da compressor_starts/compressor_hours
+ * (Teil desselben Abrufs) bereits aktiv in CompressorStartsChartWidget/
+ * CompressorHoursChartWidget verwendet werden und ein groesseres Intervall
+ * deren Tages-Zuordnung verschlechtern wuerde. Betrifft ohnehin nur die
+ * Historie - die Live-Seite App\Filament\Pages\DeviceStatus fragt
+ * unabhaengig davon immer den aktuellen Stand per API ab.
  */
 class SettingsPage extends Page
 {
@@ -60,6 +71,7 @@ class SettingsPage extends Page
             'anomaly_threshold_percent' => (float) Setting::get('anomaly_threshold_percent', 30),
             'anomaly_lookback_days' => (int) Setting::get('anomaly_lookback_days', 14),
             'sync_outage_threshold_hours' => (int) Setting::get('sync_outage_threshold_hours', 24),
+            'device_status_sync_interval_hours' => (int) Setting::get('device_status_sync_interval_hours', 0),
         ]);
     }
 
@@ -87,6 +99,18 @@ class SettingsPage extends Page
                                 ? 'Aktuell aufgelöst: ' . number_format((float) Setting::get('weather_latitude'), 4, ',', '.') . ', ' . number_format((float) Setting::get('weather_longitude'), 4, ',', '.')
                                 : 'Noch kein Standort hinterlegt.')
                             ->maxLength(255),
+                    ]),
+                Section::make('Gerätestatus-Historisierung')
+                    ->description('Vorlauf-/Rücklauftemperatur, Druck, Pumpe, Volumenstrom, Verdichterstatus und Kompressorstarts/-stunden werden zusätzlich zu den Verbrauchsdaten in der Historie gespeichert (u. a. für die Kompressor-Charts im Dashboard). Die Live-Seite "Gerätestatus" ist davon unabhängig und zeigt immer den aktuellen Stand direkt von der API.')
+                    ->schema([
+                        TextInput::make('device_status_sync_interval_hours')
+                            ->label('Mindestabstand zwischen Abrufen')
+                            ->helperText('0 = bei jedem Sync (Standard, alle 15 Minuten). Ein größerer Wert spart API-Requests, verschlechtert aber die Tages-Zuordnung der Kompressorstarts/-stunden-Charts, da der letzte Tageswert dann nicht mehr nahe Mitternacht liegt.')
+                            ->numeric()
+                            ->minValue(0)
+                            ->maxValue(168)
+                            ->suffix('Std.')
+                            ->required(),
                     ]),
                 Section::make('Mail-Reporting')
                     ->description('Periodische Zusammenfassung + Warnungen bei auffälligem Tagesverbrauch oder Sync-Ausfall (Fahrplan Phase 6). Ohne Empfänger-Adresse wird keine Mail verschickt.')
@@ -141,6 +165,7 @@ class SettingsPage extends Page
         Setting::set('anomaly_threshold_percent', $data['anomaly_threshold_percent']);
         Setting::set('anomaly_lookback_days', $data['anomaly_lookback_days']);
         Setting::set('sync_outage_threshold_hours', $data['sync_outage_threshold_hours']);
+        Setting::set('device_status_sync_interval_hours', $data['device_status_sync_interval_hours']);
 
         $this->saveWeatherLocation($data['weather_location_name'] ?? null);
 

@@ -19,11 +19,27 @@ use Illuminate\Support\Carbon;
  * Seit Fabians Wunsch (30.10.2026) zusaetzlich die "Geraetestatus"-Werte
  * (Vorlauf-/Ruecklauftemperatur, Anlagendruck, interne Pumpe, Volumenstrom,
  * Sekundaerkreis-Vorlauftemperatur, Verdichterstatus) - gleiche Snapshot-
- * Charakteristik, ueber ViessmannApiClient::getDeviceStatus() in einem
- * einzigen zusaetzlichen API-Request abgerufen. Dieselben Werte liest auch
- * die Live-Seite App\Filament\Pages\DeviceStatus direkt per API ab, ohne
- * den Umweg ueber api_log - die hier gespeicherte Kopie dient nur der
- * spaeteren Historisierung/Verlaufsdarstellung.
+ * Charakteristik, ueber ViessmannApiClient::getDeviceStatus() abgerufen.
+ * Dieselben Werte liest auch die Live-Seite App\Filament\Pages\DeviceStatus
+ * direkt per API ab, unabhaengig von diesem Sync - die hier gespeicherte
+ * Kopie dient nur der spaeteren Historisierung/Verlaufsdarstellung.
+ *
+ * Optionaler Mindestabstand fuer genau diesen Geraetestatus-Abruf
+ * (settings.device_status_sync_interval_hours, Default 0 = kein
+ * Mindestabstand, also wie bisher bei jedem 15-Minuten-Sync). Ueberlegung
+ * dahinter (Fabians Einwand, 03.11.2026): der Geraetestatus ist ein reiner
+ * Momentanwert ohne Tagesbezug und die Live-Seite DeviceStatus fragt davon
+ * unabhaengig immer frisch ab - ein groesseres Intervall waere fuer die
+ * reine Historisierung also theoretisch moeglich. Dagegen spricht aber,
+ * dass compressor_starts/compressor_hours (Teil desselben Abrufs) bereits
+ * aktiv in zwei Dashboard-Widgets verwendet werden
+ * (CompressorStartsChartWidget/CompressorHoursChartWidget), die den
+ * Tageswert als Differenz aus dem letzten Abruf des Tages berechnen - bei
+ * einem groesseren Intervall faellt dieser "letzte Abruf" nicht mehr nahe
+ * Mitternacht, wodurch Starts/Stunden tageweise falsch zugeordnet werden
+ * koennten. Deshalb bleibt der Default bei 0 (jeder Sync); die Einstellung
+ * existiert fuer den Fall, dass die Genauigkeit dieser beiden Widgets
+ * bewusst gegen weniger API-Requests abgewogen werden soll.
  */
 class ViessmannSyncService
 {
@@ -32,6 +48,12 @@ class ViessmannSyncService
      * zurueckliegen (0 = heute, bestaetigt in Abschnitt 3 des Fahrplans).
      */
     private const DAY_ARRAY_LENGTH = 8;
+
+    /**
+     * Fallback, falls settings.device_status_sync_interval_hours (noch)
+     * nicht gesetzt ist. 0 = kein Mindestabstand (jeder Sync).
+     */
+    private const DEFAULT_DEVICE_STATUS_INTERVAL_HOURS = 0;
 
     public function __construct(
         private readonly ViessmannApiClient $client,
@@ -68,12 +90,18 @@ class ViessmannSyncService
         // Thermik/Aussentemperatur/Kompressor-Statistik ein reiner Snapshot
         // ohne day[]-Array, deshalb nur fuer day_index=0 geschrieben (siehe
         // Migration 2026_10_30_180000_add_device_status_fields_to_api_log_table).
-        // Enthaelt auch compressor_starts/compressor_hours - ersetzt den
-        // vorherigen separaten compressorStatistics()-Aufruf (ein
-        // API-Request weniger pro Sync, siehe
-        // ViessmannApiClient::getDeviceStatus()-Docblock).
-        $deviceStatus = $this->client->getDeviceStatus();
-        $compressor = ['starts' => $deviceStatus['compressor_starts'], 'hours' => $deviceStatus['compressor_hours']];
+        // Enthaelt auch compressor_starts/compressor_hours.
+        //
+        // Nur abrufen, wenn das konfigurierte Intervall seit dem letzten
+        // erfolgreichen Abruf abgelaufen ist (Fabians Einwand 03.11.2026,
+        // siehe Klassen-Docblock) - sonst bleiben alle Geraetestatus-Felder
+        // in der neuen Zeile null, die Verbrauchsdaten werden davon nicht
+        // beruehrt.
+        $deviceStatus = $this->shouldFetchDeviceStatus($now) ? $this->client->getDeviceStatus() : null;
+        $compressor = [
+            'starts' => $deviceStatus['compressor_starts'] ?? null,
+            'hours' => $deviceStatus['compressor_hours'] ?? null,
+        ];
 
         $this->refreshDeviceInfo();
 
@@ -136,14 +164,14 @@ class ViessmannSyncService
                 'outdoor_temp' => $dayIndex === 0 ? $outdoorTemp : null,
                 'compressor_starts' => $dayIndex === 0 ? ($compressor['starts'] ?? null) : null,
                 'compressor_hours' => $dayIndex === 0 ? ($compressor['hours'] ?? null) : null,
-                'flow_temp' => $dayIndex === 0 ? $deviceStatus['flow_temp'] : null,
-                'return_temp' => $dayIndex === 0 ? $deviceStatus['return_temp'] : null,
-                'system_pressure' => $dayIndex === 0 ? $deviceStatus['system_pressure'] : null,
-                'internal_pump_status' => $dayIndex === 0 ? $deviceStatus['internal_pump_status'] : null,
-                'volumetric_flow' => $dayIndex === 0 ? $deviceStatus['volumetric_flow'] : null,
-                'secondary_flow_temp' => $dayIndex === 0 ? $deviceStatus['secondary_flow_temp'] : null,
-                'compressor_active' => $dayIndex === 0 ? $deviceStatus['compressor_active'] : null,
-                'compressor_phase' => $dayIndex === 0 ? $deviceStatus['compressor_phase'] : null,
+                'flow_temp' => $dayIndex === 0 ? ($deviceStatus['flow_temp'] ?? null) : null,
+                'return_temp' => $dayIndex === 0 ? ($deviceStatus['return_temp'] ?? null) : null,
+                'system_pressure' => $dayIndex === 0 ? ($deviceStatus['system_pressure'] ?? null) : null,
+                'internal_pump_status' => $dayIndex === 0 ? ($deviceStatus['internal_pump_status'] ?? null) : null,
+                'volumetric_flow' => $dayIndex === 0 ? ($deviceStatus['volumetric_flow'] ?? null) : null,
+                'secondary_flow_temp' => $dayIndex === 0 ? ($deviceStatus['secondary_flow_temp'] ?? null) : null,
+                'compressor_active' => $dayIndex === 0 ? ($deviceStatus['compressor_active'] ?? null) : null,
+                'compressor_phase' => $dayIndex === 0 ? ($deviceStatus['compressor_phase'] ?? null) : null,
             ]);
 
             $written++;
@@ -186,6 +214,39 @@ class ViessmannSyncService
         }
 
         return true;
+    }
+
+    /**
+     * Prueft, ob seit dem letzten erfolgreichen Geraetestatus-Abruf der
+     * konfigurierte Mindestabstand (settings.device_status_sync_interval_hours,
+     * Default self::DEFAULT_DEVICE_STATUS_INTERVAL_HOURS = 0) abgelaufen ist.
+     * 0 (oder negativ) bedeutet kein Mindestabstand - es wird bei jedem Sync
+     * abgerufen (Ausgangszustand).
+     *
+     * Der "letzte erfolgreiche Abruf" wird anhand der juengsten api_log-
+     * Zeile mit gesetztem flow_temp ermittelt (NULL bedeutet: in diesem
+     * Sync-Lauf nicht abgerufen, siehe sync()).
+     */
+    private function shouldFetchDeviceStatus(Carbon $now): bool
+    {
+        $intervalHours = (int) Setting::get(
+            'device_status_sync_interval_hours',
+            self::DEFAULT_DEVICE_STATUS_INTERVAL_HOURS
+        );
+
+        if ($intervalHours <= 0) {
+            return true;
+        }
+
+        $lastFetchedAt = ApiLog::query()
+            ->whereNotNull('flow_temp')
+            ->max('timestamp');
+
+        if ($lastFetchedAt === null) {
+            return true;
+        }
+
+        return Carbon::parse($lastFetchedAt)->addHours($intervalHours)->lte($now);
     }
 
     /**

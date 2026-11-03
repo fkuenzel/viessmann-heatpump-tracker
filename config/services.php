@@ -35,4 +35,11 @@ return [
         ],
     ],
 
+    'artisan_runner' => [
+        // Ersatz fuer SSH/CLI auf Webspace ohne Shell-Zugriff, siehe
+        // App\Http\Controllers\ArtisanRunnerController. Leer = Endpoint
+        // deaktiviert (Standard im lokalen Betrieb).
+        'token' => env('ARTISAN_RUNNER_TOKEN'),
+    ],
+
 ];

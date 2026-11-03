@@ -1,0 +1,23 @@
+# Sicherheitsnetz fuer Webspace-Accounts, bei denen das Document Root versehentlich
+# auf das Projekt-Root statt auf /public zeigt (klassischer Stolperstein bei Shared-
+# Hosting ohne eigenen vHost, siehe github-fahrplan.md Abschnitt 6.2). Verweigert in
+# diesem Fall den direkten Zugriff auf .env, database.sqlite, storage/, vendor/ etc.
+# Ersetzt NICHT die korrekte Konfiguration (Document Root = /public) - nur zusaetzliche
+# Absicherung, falls diese Konfiguration dennoch fehlerhaft ist.
+
+# Dotfiles (.env, .git, .gitignore, ...)
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(vendor|storage|database|bootstrap|app|config|resources|routes|tests)/ - [F,L]
+</IfModule>
+
+<IfModule !mod_rewrite.c>
+    # Fallback ohne mod_rewrite: Verzeichnislisting verhindern, einzelne
+    # Dateien in diesen Ordnern bleiben ohne mod_rewrite leider erreichbar -
+    # Document Root MUSS in diesem Fall unbedingt auf /public zeigen.
+    Options -Indexes
+</IfModule>
