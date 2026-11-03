@@ -50,6 +50,32 @@ class Dashboard extends BaseDashboard
             ]);
     }
 
+    /**
+     * Ueberschreibt Filaments fest verdrahtetes getColumns() (immer 2 Spalten,
+     * vendor/filament/filament/src/Pages/Dashboard.php:74 - kein Breakpoint-
+     * Array, sondern ein einzelner int, der unabhaengig von der Bildschirm-
+     * breite gilt). Dadurch wurden auf dem Smartphone alle Widgets mit
+     * columnSpan=1 (alle ChartWidgets + MeterTotalsWidget) in eine erzwungene
+     * 2-Spalten-Reihe gequetscht: jede Grid-Zeile richtet ihre Hoehe am
+     * hoechsten Widget der Reihe aus, wodurch unter den schmaleren/kuerzeren
+     * Widgets riesige Luecken entstanden (Fabians Screenshot, 02.11.2026) -
+     * genau das in freier Breite nebeneinander gedachte Layout (siehe
+     * Kommentare "Halbe Breite ... Dashboard-Grid hat 2 Spalten" in den
+     * einzelnen ChartWidgets) ist erst ab "md" sinnvoll, darunter soll jedes
+     * Widget die volle Breite bekommen.
+     *
+     * @return int | array<string, int>
+     */
+    public function getColumns(): int | array
+    {
+        return [
+            'default' => 1,
+            'sm' => 1,
+            'md' => 2,
+            'lg' => 2,
+        ];
+    }
+
     protected function getHeaderActions(): array
     {
         return [

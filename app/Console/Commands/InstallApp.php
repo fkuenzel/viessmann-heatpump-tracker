@@ -41,6 +41,7 @@ class InstallApp extends Command
         $this->info('Viessmann-Wärmepumpen-Dashboard: Erstinstallation');
         $this->newLine();
 
+        $this->checkProductionSecurity();
         $this->runMigrations();
         $this->createAdminUser();
 
@@ -58,6 +59,52 @@ class InstallApp extends Command
         $this->line('Wetter-Standort und Stromtarif können anschließend unter "Einstellungen" bzw. "Stromtarife" in der Oberfläche hinterlegt werden.');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Warnt vor den bekannten Stolperfallen eines oeffentlich erreichbaren
+     * Produktions-Betriebs (github-fahrplan.md Abschnitt 6, Punkte 3+4):
+     * APP_DEBUG muss in Produktion aus sein (sonst oeffentliche Stacktraces
+     * inkl. .env-Werten bei Fehlern), Session-Cookies sollten bei HTTPS-
+     * Betrieb als "secure" markiert sein, und die Installation sollte
+     * durchgaengig ueber HTTPS laufen. Greift nur, wenn APP_ENV=production
+     * gesetzt ist - bei lokaler Entwicklung (APP_ENV=local) absichtlich
+     * keine Warnung, da APP_DEBUG=true dort der sinnvolle Standard ist.
+     */
+    private function checkProductionSecurity(): void
+    {
+        if (config('app.env') !== 'production') {
+            return;
+        }
+
+        $this->info('Sicherheits-Check (Produktionsumgebung erkannt)');
+
+        $problems = [];
+
+        if (config('app.debug') === true) {
+            $problems[] = 'APP_DEBUG=true in .env - zeigt bei Fehlern Stacktraces inklusive .env-Werten öffentlich an. Vor dem Go-Live auf APP_DEBUG=false setzen.';
+        }
+
+        if (! config('session.secure')) {
+            $problems[] = 'SESSION_SECURE_COOKIE ist nicht auf true gesetzt - Session-Cookies werden dann auch über unverschlüsseltes HTTP übertragen. Bei HTTPS-Betrieb SESSION_SECURE_COOKIE=true setzen.';
+        }
+
+        if (! str_starts_with((string) config('app.url'), 'https://')) {
+            $problems[] = 'APP_URL beginnt nicht mit https:// - für eine öffentlich erreichbare Installation sollte durchgängig HTTPS verwendet werden.';
+        }
+
+        if (empty($problems)) {
+            $this->line('Keine der bekannten Produktions-Stolperfallen gefunden.');
+            $this->newLine();
+
+            return;
+        }
+
+        foreach ($problems as $problem) {
+            $this->warn('- ' . $problem);
+        }
+
+        $this->newLine();
     }
 
     private function runMigrations(): void

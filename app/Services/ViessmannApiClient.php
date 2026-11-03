@@ -105,7 +105,7 @@ class ViessmannApiClient
      */
     public function getAccessToken(): string
     {
-        $accessToken = Setting::get(self::SETTING_ACCESS_TOKEN);
+        $accessToken = Setting::getEncrypted(self::SETTING_ACCESS_TOKEN);
         $expiresAt = Setting::get(self::SETTING_EXPIRES_AT);
 
         if ($accessToken && $expiresAt && now()->lt(\Carbon\Carbon::parse($expiresAt)->subSeconds(self::EXPIRY_BUFFER_SECONDS))) {
@@ -117,7 +117,7 @@ class ViessmannApiClient
 
     public function refreshAccessToken(): string
     {
-        $refreshToken = Setting::get(self::SETTING_REFRESH_TOKEN);
+        $refreshToken = Setting::getEncrypted(self::SETTING_REFRESH_TOKEN);
 
         if (! $refreshToken) {
             throw new ViessmannApiException('Kein Refresh-Token vorhanden. Bitte die Viessmann-Verbindung einmalig ueber den Authorize-Flow autorisieren.');
@@ -135,7 +135,7 @@ class ViessmannApiClient
 
         $this->storeTokenResponse($response->json());
 
-        return Setting::get(self::SETTING_ACCESS_TOKEN);
+        return Setting::getEncrypted(self::SETTING_ACCESS_TOKEN);
     }
 
     /**
@@ -466,11 +466,11 @@ class ViessmannApiClient
             throw new ViessmannApiException('Token-Antwort enthielt keinen access_token: ' . json_encode($data));
         }
 
-        Setting::set(self::SETTING_ACCESS_TOKEN, $data['access_token']);
+        Setting::setEncrypted(self::SETTING_ACCESS_TOKEN, $data['access_token']);
         Setting::set(self::SETTING_EXPIRES_AT, now()->addSeconds((int) ($data['expires_in'] ?? 3600))->toIso8601String());
 
         if (isset($data['refresh_token'])) {
-            Setting::set(self::SETTING_REFRESH_TOKEN, $data['refresh_token']);
+            Setting::setEncrypted(self::SETTING_REFRESH_TOKEN, $data['refresh_token']);
         }
     }
 }

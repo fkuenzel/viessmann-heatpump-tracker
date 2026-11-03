@@ -74,22 +74,34 @@ class AdminPanelProvider extends PanelProvider
                         .fi-sidebar {
                             background-color: rgb(249 250 251);
                             border-inline-end: 1px solid rgb(228 228 231);
-                            /* Sidebar bleibt beim Scrollen des Dashboard-Inhalts stehen statt
-                               mitzuscrollen (Fabians Wunsch 30.10.2026) - auf Full-HD passt die
-                               gesamte Sidebar inkl. Geraete-Stammdaten-Box ohnehin in die
-                               Bildschirmhoehe, bei kleineren Bildschirmen/mehr Nav-Punkten
-                               scrollt stattdessen nur die Sidebar selbst (overflow-y: auto).
-                               top/height beruecksichtigen die Topbar-Hoehe (Filament-Standard
-                               4rem/h-16) - ohne Abzug ragte die Sidebar mit reinem 100vh unten
-                               ueber den sichtbaren Bereich hinaus (Fabians Hinweis 30.10.2026). */
-                            position: sticky;
-                            top: 4rem;
-                            height: calc(100vh - 4rem);
-                            overflow-y: auto;
                         }
                         .dark .fi-sidebar {
                             background-color: rgb(24 24 27);
                             border-inline-end-color: rgb(39 39 42);
+                        }
+                        /* position: sticky nur ab Filaments eigenem Sidebar-Breakpoint
+                           (lg, 64rem/1024px - vendor/.../app.css: ".fi-sidebar.fi-sidebar-open,
+                           ... { position: sticky }" steht dort selbst in
+                           "@media (min-width:64rem)"). Unterhalb von 1024px ist die Sidebar bei
+                           Filament bewusst "position: fixed" + per Transform aus dem Bild
+                           geschoben (Overlay-Drawer, nimmt KEINEN Platz im Layout ein) - ohne
+                           diese Media Query ueberschrieb unser sticky die Sidebar auf dem Handy
+                           ebenfalls, wodurch sie trotz (korrekt) unsichtbarem Zustand ihre Breite
+                           im Grid reservierte und den Dashboard-Content zusammenquetschte
+                           (Fabians Hinweis 02.11.2026, Screenshot zeigte Content nur in der
+                           halben Bildschirmbreite). Ab 1024px bleibt das bisherige Verhalten
+                           (Sidebar bleibt beim Scrollen stehen statt mitzuscrollen, Fabians
+                           Wunsch 30.10.2026) unveraendert - top/height beruecksichtigen die
+                           Topbar-Hoehe (Filament-Standard 4rem/h-16), overflow-y: auto laesst bei
+                           kleineren Bildschirmen/mehr Nav-Punkten nur die Sidebar selbst
+                           scrollen. */
+                        @media (min-width: 64rem) {
+                            .fi-sidebar {
+                                position: sticky;
+                                top: 4rem;
+                                height: calc(100vh - 4rem);
+                                overflow-y: auto;
+                            }
                         }
 
                         .fi-topbar-weather {
