@@ -47,21 +47,45 @@ class MailReportingService
     }
 
     /**
-     * Warnt, wenn seit dem zuletzt geschriebenen api_log-Eintrag (vor diesem
-     * Sync-Lauf) mehr Zeit vergangen ist als der konfigurierte Schwellenwert
-     * - typischer Fall: Herd/Rechner war laengere Zeit aus (kein
-     * Dauerbetrieb, Abschnitt 0).
+     * Bewertet, ob seit dem zuletzt geschriebenen api_log-Eintrag mehr Zeit
+     * vergangen ist als der konfigurierte Schwellenwert - typischer Fall:
+     * Herd/Rechner war längere Zeit aus (kein Dauerbetrieb, Abschnitt 0).
+     * Reine Auswertung ohne Seiteneffekte (kein Mailversand, kein Debounce),
+     * damit sie auch der MCP-Server (App\Mcp\Tools\CheckAnomalies) nutzen
+     * kann.
+     *
+     * @return array{status: string, gap_hours: ?int, threshold_hours: int, last_entry_at: ?Carbon}
+     *         status: 'no_data' (noch kein api_log-Eintrag), 'ok' oder 'outage'
      */
-    private function checkSyncOutage(string $recipient, Carbon $now, ?Carbon $latestLogTimestampBeforeSync): void
+    public function evaluateSyncOutage(Carbon $now, ?Carbon $latestLogTimestamp): array
     {
-        if ($latestLogTimestampBeforeSync === null) {
-            return;
+        $thresholdHours = (int) Setting::get('sync_outage_threshold_hours', 24);
+
+        if ($latestLogTimestamp === null) {
+            return [
+                'status' => 'no_data',
+                'gap_hours' => null,
+                'threshold_hours' => $thresholdHours,
+                'last_entry_at' => null,
+            ];
         }
 
-        $thresholdHours = (int) Setting::get('sync_outage_threshold_hours', 24);
-        $gapHours = $latestLogTimestampBeforeSync->diffInHours($now);
+        // Carbon 3 liefert diffInHours() als float; SyncOutageWarningMail erwartet int.
+        $gapHours = (int) $latestLogTimestamp->diffInHours($now);
 
-        if ($gapHours < $thresholdHours) {
+        return [
+            'status' => $gapHours >= $thresholdHours ? 'outage' : 'ok',
+            'gap_hours' => $gapHours,
+            'threshold_hours' => $thresholdHours,
+            'last_entry_at' => $latestLogTimestamp,
+        ];
+    }
+
+    private function checkSyncOutage(string $recipient, Carbon $now, ?Carbon $latestLogTimestampBeforeSync): void
+    {
+        $result = $this->evaluateSyncOutage($now, $latestLogTimestampBeforeSync);
+
+        if ($result['status'] !== 'outage') {
             return;
         }
 
@@ -69,32 +93,56 @@ class MailReportingService
             return;
         }
 
-        Mail::to($recipient)->send(new SyncOutageWarningMail($latestLogTimestampBeforeSync, $now, $gapHours));
+        Mail::to($recipient)->send(new SyncOutageWarningMail($latestLogTimestampBeforeSync, $now, $result['gap_hours']));
 
         Setting::set('last_outage_warning_date', $now->toDateString());
     }
 
     /**
-     * Vergleicht den Gesamt-Stromverbrauch des zuletzt vollstaendig
+     * Vergleicht den Gesamt-Stromverbrauch des zuletzt vollständig
      * abgeschlossenen Tages (gestern) mit dem gleitenden Durchschnitt der
-     * vorangegangenen `anomaly_lookback_days` Tage. Warnt bei Ueberschreitung
-     * des konfigurierten Prozentsatzes.
+     * vorangegangenen `anomaly_lookback_days` Tage und bewertet, ob die
+     * Abweichung den konfigurierten Prozentsatz erreicht. Reine Auswertung
+     * ohne Seiteneffekte (kein Mailversand, kein Debounce), damit sie auch
+     * der MCP-Server (App\Mcp\Tools\CheckAnomalies) nutzen kann.
+     *
+     * @return array{
+     *     status: string,
+     *     date: Carbon,
+     *     value_kwh: ?float,
+     *     average_kwh: ?float,
+     *     deviation_percent: ?float,
+     *     threshold_percent: float,
+     *     lookback_days: int,
+     *     comparison_days: int,
+     * }
+     *         status: 'no_value' (kein Tageswert für gestern), 'insufficient_data'
+     *         (weniger als 3 Vergleichstage oder Durchschnitt 0), 'ok' oder 'anomaly'
      */
-    private function checkAnomaly(string $recipient, Carbon $now): void
+    public function evaluateAnomaly(Carbon $now): array
     {
-        if (Setting::get('last_anomaly_warning_date') === $now->toDateString()) {
-            return;
-        }
-
         $yesterday = $now->copy()->subDay()->startOfDay();
+        $lookbackDays = (int) Setting::get('anomaly_lookback_days', 14);
+        $thresholdPercent = (float) Setting::get('anomaly_threshold_percent', 30);
+
+        $result = [
+            'status' => 'no_value',
+            'date' => $yesterday,
+            'value_kwh' => null,
+            'average_kwh' => null,
+            'deviation_percent' => null,
+            'threshold_percent' => $thresholdPercent,
+            'lookback_days' => $lookbackDays,
+            'comparison_days' => 0,
+        ];
+
         $value = $this->aggregation->dailyPowerValue($yesterday, 'power_total_kwh');
 
         if ($value === null) {
-            return;
+            return $result;
         }
 
-        $lookbackDays = (int) Setting::get('anomaly_lookback_days', 14);
-        $thresholdPercent = (float) Setting::get('anomaly_threshold_percent', 30);
+        $result['value_kwh'] = $value;
 
         $comparisonValues = [];
         for ($i = 1; $i <= $lookbackDays; $i++) {
@@ -105,25 +153,50 @@ class MailReportingService
             }
         }
 
+        $result['comparison_days'] = count($comparisonValues);
+
         // Ohne ausreichend Vergleichsbasis (z. B. ganz am Anfang des Betriebs)
-        // laesst sich keine belastbare Abweichung berechnen.
+        // lässt sich keine belastbare Abweichung berechnen.
         if (count($comparisonValues) < 3) {
-            return;
+            $result['status'] = 'insufficient_data';
+
+            return $result;
         }
 
         $average = array_sum($comparisonValues) / count($comparisonValues);
+        $result['average_kwh'] = $average;
 
         if ($average <= 0) {
-            return;
+            $result['status'] = 'insufficient_data';
+
+            return $result;
         }
 
         $deviationPercent = (($value - $average) / $average) * 100;
+        $result['deviation_percent'] = $deviationPercent;
+        $result['status'] = $deviationPercent >= $thresholdPercent ? 'anomaly' : 'ok';
 
-        if ($deviationPercent < $thresholdPercent) {
+        return $result;
+    }
+
+    private function checkAnomaly(string $recipient, Carbon $now): void
+    {
+        if (Setting::get('last_anomaly_warning_date') === $now->toDateString()) {
             return;
         }
 
-        Mail::to($recipient)->send(new AnomalyWarningMail($yesterday, $value, $average, $deviationPercent));
+        $result = $this->evaluateAnomaly($now);
+
+        if ($result['status'] !== 'anomaly') {
+            return;
+        }
+
+        Mail::to($recipient)->send(new AnomalyWarningMail(
+            $result['date'],
+            $result['value_kwh'],
+            $result['average_kwh'],
+            $result['deviation_percent'],
+        ));
 
         Setting::set('last_anomaly_warning_date', $now->toDateString());
     }

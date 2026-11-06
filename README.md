@@ -132,6 +132,70 @@ Legt eine Kopie unter `storage/app/backups/` ab und entfernt automatisch Kopien 
 - Frischer Stand zum lokalen Debuggen: Server-`database.sqlite` per FTP herunterladen, nur lesend lokal verwenden.
 - Viessmann-OAuth: Redirect-URI im Developer-Portal auf `https://<domain>/viessmann/callback` umstellen bzw. ergänzen und einmalig `https://<domain>/viessmann/connect` aufrufen, um die Tokens für die neue Domain neu auszustellen.
 
+## MCP-Anbindung (ab Version 1.1.0)
+
+Die Anwendung stellt ihre Daten über einen MCP-Server bereit, sodass Claude (oder jeder andere MCP-Client) Heizungsdaten direkt abfragen kann. Der Zugriff ist ausschließlich lesend; es gibt keine Tools, die Daten schreiben, löschen oder einen Sync anstoßen.
+
+### Einrichtung
+
+1. Token erzeugen (mindestens 32 Zeichen, nicht identisch mit `ARTISAN_RUNNER_TOKEN`):
+
+   ```
+   php artisan tinker --execute="echo bin2hex(random_bytes(32));"
+   ```
+
+2. In der `.env` des jeweiligen Systems eintragen: `MCP_API_TOKEN=<token>`. Ohne Token (oder bei weniger als 32 Zeichen) ist der Endpunkt vollständig deaktiviert und antwortet mit 404.
+3. Nach dem Ändern der `.env` auf dem Server gegebenenfalls `.../system/run/config-clear?token=...` aufrufen.
+
+Der Endpunkt lautet `POST https://<domain>/mcp` (Streamable HTTP). Authentifiziert wird ausschließlich über den Header `Authorization: Bearer <token>`; ein Token in der URL wird bewusst nicht akzeptiert, weil URLs in Server- und Proxy-Logs landen.
+
+### Verfügbare Tools
+
+| Tool | Inhalt |
+|---|---|
+| `get_current_status` | Letzter Sync, bisherige Tageswerte, Außentemperatur, Gerätezustand, Kompressor-Zähler |
+| `get_daily_summary` | Strom, Thermik, COP, Temperaturen und Kompressor für einen Tag, inklusive zählerbasierter Schätzung |
+| `get_interval_breakdown` | Zählerintervalle mit Verbrauch (Zähler und App), Korrekturfaktor, Heizen/Warmwasser, echtem COP und Kosten |
+| `get_cop_trend` | COP-Verlauf der letzten Tage (App-Wert und zählerbasierte Schätzung) |
+| `check_anomalies` | Auffälliger Tagesverbrauch und Sync-Ausfall (gleiche Regeln wie das Mail-Reporting, ohne Mailversand) |
+| `get_compressor_stats` | Tägliche Starts und Laufzeit des Kompressors, Durchschnitte |
+| `get_weather_comparison` | Externe Temperatur gegenüber Anlagensensor sowie Kurzfrist-Prognose |
+
+Die Ausgaben unterscheiden durchgehend zwischen App-Werten (Viessmann-API) und zählerbasierten Werten. Fehlende Daten werden als `null` geliefert, nie als 0. Zeiträume sind begrenzt (maximal 90 bzw. 92 Tage).
+
+### Client einrichten
+
+- **Claude Code:**
+
+  ```
+  claude mcp add --transport http heatpump https://<domain>/mcp --header "Authorization: Bearer <token>"
+  ```
+
+- **Claude Desktop:** über den Brückenprozess `mcp-remote` (benötigt Node.js), der den Header mitsendet:
+
+  ```json
+  {
+    "mcpServers": {
+      "heatpump": {
+        "command": "npx",
+        "args": ["-y", "mcp-remote", "https://<domain>/mcp", "--header", "Authorization: Bearer ${MCP_TOKEN}"],
+        "env": { "MCP_TOKEN": "<token>" }
+      }
+    }
+  }
+  ```
+
+- **claude.ai (Web) als Connector:** Benutzerdefinierte Connectoren verwenden OAuth und können keinen statischen Bearer-Header senden. Für diesen Weg wäre ein OAuth-Flow (z. B. mit Laravel Passport) nötig; das ist aktuell nicht umgesetzt.
+
+### Sicherheit
+
+- Vergleich des Tokens zeitkonstant (`hash_equals`), fehlgeschlagene Versuche werden ohne Token-Inhalt protokolliert.
+- In `APP_ENV=production` werden Aufrufe ohne HTTPS mit 403 abgewiesen.
+- Rate-Limit: 120 Anfragen pro Minute und IP.
+- Auf Servern mit Apache/CGI muss der `Authorization`-Header an PHP durchgereicht werden. Das mitgelieferte `public/.htaccess` von Laravel übernimmt das; bei Problemen (401 trotz korrektem Token) die entsprechende Rewrite-Regel prüfen.
+- Das Token gewährt Lesezugriff auf sämtliche Verbrauchs- und Gerätedaten. Bei Verdacht auf Weitergabe in der `.env` austauschen.
+- Da `laravel/mcp` ab 1.1.0 unter `require` steht, muss beim Deployment ohne SSH das lokale `composer install --no-dev --optimize-autoloader` nach dem Update erneut ausgeführt und `vendor/` neu hochgeladen werden.
+
 ## Verwendete Technologien
 
 - **[Laravel 12](https://laravel.com/)** – PHP-Framework (Eloquent ORM, Scheduler, Mail)
@@ -142,6 +206,7 @@ Legt eine Kopie unter `storage/app/backups/` ab und entfernt automatisch Kopien 
 - **Chart.js** (über Filaments Chart-Widgets) – Diagramme für Verbrauch, COP und Temperaturvergleich
 - **Tailwind CSS** – Styling-Grundlage von Filament
 - **Guzzle** – HTTP-Client für die Viessmann-API-Anbindung
+- **[laravel/mcp](https://github.com/laravel/mcp)** – MCP-Server für den lesenden Zugriff durch Claude
 
 ## Lizenz
 

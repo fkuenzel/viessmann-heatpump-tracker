@@ -24,21 +24,36 @@ class CopCalculationService
 
     public function forDate(Carbon $date): ?float
     {
+        return $this->detailsForDate($date)['cop'];
+    }
+
+    /**
+     * Wie forDate(), liefert aber zusätzlich die zugrunde liegenden
+     * Tagessummen (Thermik Heizen + Warmwasser, Strom gesamt), damit der
+     * MCP-Server (App\Mcp\Tools\GetCopTrend) nicht dieselben Werte ein
+     * zweites Mal abfragen muss. Die COP-Berechnung selbst ist unverändert.
+     *
+     * @return array{cop: ?float, thermal_kwh: ?float, power_kwh: ?float}
+     */
+    public function detailsForDate(Carbon $date): array
+    {
         $thermalHeating = $this->aggregation->lastSnapshotValue($date, 'thermal_heating_kwh');
         $thermalDhw = $this->aggregation->lastSnapshotValue($date, 'thermal_dhw_kwh');
         $power = $this->aggregation->dailyPowerValue($date, 'power_total_kwh');
 
-        if ($power === null || $power <= 0) {
-            return null;
-        }
+        $thermal = ($thermalHeating === null && $thermalDhw === null)
+            ? null
+            : ($thermalHeating ?? 0) + ($thermalDhw ?? 0);
 
-        if ($thermalHeating === null && $thermalDhw === null) {
-            return null;
-        }
+        $cop = ($power === null || $power <= 0 || $thermal === null)
+            ? null
+            : round($thermal / $power, 3);
 
-        $thermal = ($thermalHeating ?? 0) + ($thermalDhw ?? 0);
-
-        return round($thermal / $power, 3);
+        return [
+            'cop' => $cop,
+            'thermal_kwh' => $thermal,
+            'power_kwh' => $power,
+        ];
     }
 
     /**
