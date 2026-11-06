@@ -42,4 +42,13 @@ return [
         'token' => env('ARTISAN_RUNNER_TOKEN'),
     ],
 
+    'mcp' => [
+        // Bearer-Token für den MCP-Endpoint (POST /mcp, rein lesender Zugriff
+        // auf die Anlagendaten), siehe App\Http\Middleware\AuthenticateMcpToken.
+        // Leer oder kürzer als 32 Zeichen = Endpoint deaktiviert (404).
+        // Bewusst getrennt vom artisan_runner-Token: ein kompromittierter
+        // MCP-Zugriff soll keinen Zugriff auf den Scheduler-Ersatz geben.
+        'token' => env('MCP_API_TOKEN'),
+    ],
+
 ];

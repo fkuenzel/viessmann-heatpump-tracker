@@ -17,6 +17,7 @@
         "filament/filament": "^5.11",
         "guzzlehttp/guzzle": "^7.16",
         "laravel/framework": "^12.0",
+        "laravel/mcp": "^1.1",
         "laravel/tinker": "^2.10.1"
     },
     "require-dev": {
