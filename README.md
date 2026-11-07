@@ -64,6 +64,17 @@ Diese Punkte sind keine Voraussetzung für den ersten lauffähigen Zustand und w
 
 Zählerstände werden anschließend über **Zählerstände** mit frei wählbarem Zeitpunkt erfasst.
 
+## Konfigurationsverlauf (ab Version 1.2.0)
+
+Bei jedem Sync prüft die Anwendung Heizkurve, Vorlauftemperatur-Grenzen, Soll-Raumtemperaturen, Zeitprogramme (Heizen und Warmwasser), Warmwasser-Einstellungen, Sommerbetrieb, Betriebsarten, Standby, Ferienprogramm, die §14a-Leistungsbegrenzung und die Parameter-Version. Dafür sind keine zusätzlichen API-Anfragen nötig, die Werte stammen aus der ohnehin abgerufenen Feature-Liste.
+
+- Nur tatsächliche Änderungen werden gespeichert (Tabelle `config_log`). Beim ersten Sync entsteht lediglich ein Ausgangswert ohne Notiz.
+- Zu jeder Änderung legt die Anwendung automatisch eine Notiz der Kategorie "Einstellung" an, die im Dashboard bei den Notizen erscheint.
+- Die Seite **Konfigurationsverlauf** zeigt Zeitpunkt, Einstellung sowie alten und neuen Wert.
+- Der Zeitpunkt ist nur auf das Sync-Intervall (15 Minuten) genau, da die API keinen echten Änderungszeitpunkt liefert.
+
+Beim Update auf 1.2.0 muss einmalig `php artisan migrate` ausgeführt werden.
+
 ## Bekannte Einschränkungen
 
 - Die Viessmann-API liefert Thermik-/Außentemperatur-/Kompressorwerte nur als aktuellen Tages-Snapshot (keine Nachhol-Funktion wie beim Stromverbrauch). Lücken durch Ausfallzeiten lassen sich über **Anlagenwerte** manuell nachtragen, sofern die entsprechenden Werte noch in der Viessmann-App einsehbar sind.

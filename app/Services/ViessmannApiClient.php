@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Exceptions\ViessmannApiException;
 use App\Models\Setting;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
@@ -31,6 +32,18 @@ class ViessmannApiClient
      * Sicherheitspuffer, bevor der Access-Token offiziell ablaeuft.
      */
     private const EXPIRY_BUFFER_SECONDS = 60;
+
+    /**
+     * Gueltigkeit der zwischengespeicherten Feature-Liste (siehe listFeaturesCached()).
+     */
+    private const FEATURE_LIST_CACHE_SECONDS = 60;
+
+    /**
+     * @var array<int, array<string, mixed>>
+     */
+    private array $featureListMemo = [];
+
+    private ?Carbon $featureListFetchedAt = null;
 
     public function isConnected(): bool
     {
@@ -170,6 +183,28 @@ class ViessmannApiClient
      *
      * @return array<int, array<string, mixed>>
      */
+    /**
+     * Wie listFeatures(), haelt das Ergebnis aber kurz im Speicher vor, damit
+     * ein Sync-Lauf (Geraetestatus + Konfigurationsprotokoll, ab 1.2.0) mit
+     * einem einzigen Request auskommt statt mit zwei. Die Gueltigkeit ist
+     * bewusst kurz (60 Sekunden), damit z. B. ein laenger laufender Prozess
+     * nie mit veralteten Werten arbeitet.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function listFeaturesCached(): array
+    {
+        if ($this->featureListFetchedAt !== null
+            && $this->featureListFetchedAt->diffInSeconds(now(), true) < self::FEATURE_LIST_CACHE_SECONDS) {
+            return $this->featureListMemo;
+        }
+
+        $this->featureListMemo = $this->listFeatures();
+        $this->featureListFetchedAt = now();
+
+        return $this->featureListMemo;
+    }
+
     public function listFeatures(): array
     {
         $uri = sprintf(
@@ -383,7 +418,7 @@ class ViessmannApiClient
      */
     public function getDeviceStatus(): array
     {
-        $features = collect($this->listFeatures())->keyBy('feature');
+        $features = collect($this->listFeaturesCached())->keyBy('feature');
 
         $value = function (string $featureName, string $property = 'value') use ($features) {
             return $features->get($featureName)['properties'][$property]['value'] ?? null;

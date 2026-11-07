@@ -85,7 +85,7 @@ class McpAuthenticationTest extends TestCase
 
         $response->assertOk();
         $response->assertJsonPath('result.serverInfo.name', 'Viessmann Heatpump Tracker');
-        $response->assertJsonPath('result.serverInfo.version', '1.1.0');
+        $response->assertJsonPath('result.serverInfo.version', '1.2.0');
     }
 
     public function test_plain_http_is_rejected_in_production(): void

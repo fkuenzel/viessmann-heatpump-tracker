@@ -59,6 +59,7 @@ class ViessmannSyncService
         private readonly ViessmannApiClient $client,
         private readonly ApiLogAggregationService $aggregation,
         private readonly MailReportingService $mailReporting,
+        private readonly ConfigChangeService $configChanges,
     ) {
     }
 
@@ -177,6 +178,8 @@ class ViessmannSyncService
             $written++;
         }
 
+        $this->captureConfigChanges($now);
+
         // Mail-Reporting (Fahrplan Phase 6, Fabian 29.10.2026): laeuft bei
         // jedem Sync mit, egal ob Scheduler oder manuell ausgeloest - die App
         // laeuft nicht dauerhaft (Abschnitt 0), ein separater Zeitplan wuerde
@@ -185,6 +188,23 @@ class ViessmannSyncService
         $this->mailReporting->checkAndNotify($now, $latestLogTimestampBeforeSync);
 
         return $written;
+    }
+
+    /**
+     * Konfigurationsprotokoll (ab 1.2.0): vergleicht Heizkurve, Sollwerte,
+     * Zeitprogramme usw. mit dem letzten Stand und legt bei Aenderungen
+     * Protokollzeilen samt automatischer Notiz an. Nutzt dieselbe Feature-
+     * Liste wie der Geraetestatus (ein gemeinsamer API-Request) und laeuft
+     * unabhaengig vom Geraetestatus-Intervall. Ein Fehler hier darf den Sync
+     * (Verbrauchsdaten, Mail-Reporting) nie abbrechen.
+     */
+    private function captureConfigChanges(Carbon $now): void
+    {
+        try {
+            $this->configChanges->capture($this->client->listFeaturesCached(), $now);
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
     }
 
     /**
