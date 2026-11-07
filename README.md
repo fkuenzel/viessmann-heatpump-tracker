@@ -171,6 +171,7 @@ Der Endpunkt lautet `POST https://<domain>/mcp` (Streamable HTTP). Authentifizie
 | `check_anomalies` | Auffälliger Tagesverbrauch und Sync-Ausfall (gleiche Regeln wie das Mail-Reporting, ohne Mailversand) |
 | `get_compressor_stats` | Tägliche Starts und Laufzeit des Kompressors, Durchschnitte |
 | `get_weather_comparison` | Externe Temperatur gegenüber Anlagensensor sowie Kurzfrist-Prognose |
+| `get_annotations` | Notizen im Zeitraum (manuell und automatisch erfasste Einstellungsänderungen), optional nach Kategorie |
 
 Die Ausgaben unterscheiden durchgehend zwischen App-Werten (Viessmann-API) und zählerbasierten Werten. Fehlende Daten werden als `null` geliefert, nie als 0. Zeiträume sind begrenzt (maximal 90 bzw. 92 Tage).
 

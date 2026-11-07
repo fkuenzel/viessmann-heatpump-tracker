@@ -4,6 +4,7 @@ namespace Tests\Feature\Mcp;
 
 use App\Mcp\Servers\HeatpumpServer;
 use App\Mcp\Tools\CheckAnomalies;
+use App\Mcp\Tools\GetAnnotations;
 use App\Mcp\Tools\GetCompressorStats;
 use App\Mcp\Tools\GetCopTrend;
 use App\Mcp\Tools\GetCurrentStatus;
@@ -26,6 +27,7 @@ class HeatpumpServerTest extends McpTestCase
             'check_anomalies' => CheckAnomalies::class,
             'get_compressor_stats' => GetCompressorStats::class,
             'get_weather_comparison' => GetWeatherComparison::class,
+            'get_annotations' => GetAnnotations::class,
         ];
     }
 
