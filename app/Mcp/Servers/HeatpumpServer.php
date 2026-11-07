@@ -21,7 +21,7 @@ use Laravel\Mcp\Server\Attributes\Version;
  * Filament-Widgets, liefern also dieselben Werte wie das Dashboard.
  */
 #[Name('Viessmann Heatpump Tracker')]
-#[Version('1.1.0')]
+#[Version('1.2.0')]
 #[Instructions(<<<'TEXT'
 Dieser Server stellt die Messdaten einer Viessmann-Wärmepumpe rein lesend bereit (Stromverbrauch, thermische Energie, COP, Zählerstände, Kompressor, Wetter). Es gibt keine schreibenden Tools.
 
