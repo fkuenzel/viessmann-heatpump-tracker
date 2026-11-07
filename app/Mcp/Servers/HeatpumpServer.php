@@ -3,6 +3,7 @@
 namespace App\Mcp\Servers;
 
 use App\Mcp\Tools\CheckAnomalies;
+use App\Mcp\Tools\GetAnnotations;
 use App\Mcp\Tools\GetCompressorStats;
 use App\Mcp\Tools\GetCopTrend;
 use App\Mcp\Tools\GetCurrentStatus;
@@ -21,7 +22,7 @@ use Laravel\Mcp\Server\Attributes\Version;
  * Filament-Widgets, liefern also dieselben Werte wie das Dashboard.
  */
 #[Name('Viessmann Heatpump Tracker')]
-#[Version('1.2.0')]
+#[Version('1.2.1')]
 #[Instructions(<<<'TEXT'
 Dieser Server stellt die Messdaten einer Viessmann-Wärmepumpe rein lesend bereit (Stromverbrauch, thermische Energie, COP, Zählerstände, Kompressor, Wetter). Es gibt keine schreibenden Tools.
 
@@ -32,6 +33,7 @@ Wichtige Grundlagen für die Interpretation:
 - COP = thermische Energie geteilt durch Stromverbrauch. Bei Ablese-Intervallen unter einem Tag ist der echte COP nicht aussagekräftig (reliable=false). Der erste Betriebstag nach der Inbetriebnahme ist üblicherweise ein Ausreißer (Erstbefüllung, initiales Aufheizen).
 - Alle Energiewerte in kWh, Temperaturen in °C, Daten im Format JJJJ-MM-TT, Zeitzone der Anlage (Europe/Berlin).
 - Kosten sind nur vorhanden, wenn ein Stromtarif hinterlegt ist; sonst null.
+- Notizen (get_annotations) enthalten manuelle Einträge und automatisch erfasste Einstellungsänderungen (z. B. Heizkurve, Zeitprogramme). Bei auffälligen Verbrauchs- oder COP-Änderungen lohnt ein Blick darauf, ob kurz davor etwas an der Anlage geändert wurde.
 TEXT)]
 class HeatpumpServer extends Server
 {
@@ -43,5 +45,6 @@ class HeatpumpServer extends Server
         CheckAnomalies::class,
         GetCompressorStats::class,
         GetWeatherComparison::class,
+        GetAnnotations::class,
     ];
 }
