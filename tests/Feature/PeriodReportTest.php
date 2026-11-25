@@ -93,13 +93,14 @@ class PeriodReportTest extends TestCase
         $this->assertTrue($n->comparisonTo()->lessThan($n->comparisonFrom()));
     }
 
-    public function test_custom_range_swaps_reversed_dates_and_legacy_days_filter_works(): void
+    public function test_custom_range_swaps_reversed_dates_and_unknown_filters_fall_back_to_30_days(): void
     {
         $c = ReportPeriod::forPreset('custom', '2026-11-10', '2026-11-05');
         $this->assertSame('2026-11-05', $c->from->toDateString());
 
+        // Alte Sitzungsfilter (Format "days") werden ignoriert: Standard 30 Tage.
         $legacy = ReportPeriod::fromFilters(['days' => '90']);
-        $this->assertSame('last_90', $legacy->preset);
+        $this->assertSame('last_30', $legacy->preset);
     }
 
     public function test_app_values_are_summed_day_exact(): void

@@ -40,7 +40,7 @@ final class ReportPeriod
     }
 
     /**
-     * @param  array<string, mixed>|null  $filters  Dashboard-Filter (preset, from, to, compare; Altformat: days)
+     * @param  array<string, mixed>|null  $filters  Dashboard-Filter (preset, from, to, compare)
      */
     public static function fromFilters(?array $filters, ?Carbon $now = null, ?Carbon $earliest = null): self
     {
@@ -50,10 +50,6 @@ final class ReportPeriod
             : 'previous';
 
         $preset = (string) ($filters['preset'] ?? '');
-
-        if ($preset === '' && isset($filters['days'])) {
-            $preset = 'last_' . (int) $filters['days'];
-        }
 
         if (! array_key_exists($preset, self::PRESETS)) {
             $preset = 'last_30';

@@ -14,6 +14,7 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Dashboard as BaseDashboard;
 use Filament\Pages\Dashboard\Concerns\HasFiltersForm;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 
@@ -55,40 +56,41 @@ class Dashboard extends BaseDashboard
                             ->selectablePlaceholder(false)
                             ->native(false)
                             ->live()
-                            // Voreinstellung wählen: Von/Bis zeigen den aufgelösten Zeitraum,
-                            // so wie bei Google Analytics.
-                            ->afterStateUpdated(function (string $state, Set $set): void {
-                                if ($state === 'custom') {
-                                    return;
-                                }
+                            // Beim Wechsel auf "Benutzerdefiniert" starten Von/Bis mit dem
+                            // bisher gewählten Zeitraum, statt leer zu sein.
+                            ->afterStateUpdated(function (string $state, ?string $old, Set $set): void {
+                                // "Benutzerdefiniert" startet mit dem zuvor gewählten Zeitraum,
+                                // jede andere Voreinstellung füllt Von/Bis mit ihrem Zeitraum.
+                                $source = $state === 'custom'
+                                    ? (array_key_exists((string) $old, ReportPeriod::PRESETS) && $old !== 'custom' ? $old : 'last_30')
+                                    : $state;
 
-                                $period = ReportPeriodFilters::resolve(['preset' => $state]);
+                                $period = ReportPeriodFilters::resolve(['preset' => $source]);
                                 $set('from', $period->from->toDateString());
                                 $set('to', $period->to->toDateString());
                             }),
-                        DatePicker::make('from')
-                            ->label('Von')
-                            ->native(false)
-                            ->displayFormat('d.m.Y')
-                            ->maxDate(now())
-                            ->default(fn () => ReportPeriod::forPreset('last_30')->from->toDateString())
-                            ->live()
-                            // Datum von Hand ändern: automatisch "Benutzerdefiniert".
-                            ->afterStateUpdated(fn (Set $set) => $set('preset', 'custom')),
-                        DatePicker::make('to')
-                            ->label('Bis')
-                            ->native(false)
-                            ->displayFormat('d.m.Y')
-                            ->maxDate(now())
-                            ->default(fn () => ReportPeriod::forPreset('last_30')->to->toDateString())
-                            ->live()
-                            ->afterStateUpdated(fn (Set $set) => $set('preset', 'custom')),
+                        // Der Vergleich gehört zum gewählten Zeitraum und steht direkt daneben.
                         Select::make('compare')
                             ->label('Vergleich mit')
                             ->options(ReportPeriod::COMPARE_MODES)
                             ->default('previous')
                             ->selectablePlaceholder(false)
                             ->native(false)
+                            ->live(),
+                        // Datumsfelder nur bei benutzerdefiniertem Zeitraum.
+                        DatePicker::make('from')
+                            ->label('Von')
+                            ->native(false)
+                            ->displayFormat('d.m.Y')
+                            ->maxDate(now())
+                            ->visible(fn (Get $get): bool => $get('preset') === 'custom')
+                            ->live(),
+                        DatePicker::make('to')
+                            ->label('Bis')
+                            ->native(false)
+                            ->displayFormat('d.m.Y')
+                            ->maxDate(now())
+                            ->visible(fn (Get $get): bool => $get('preset') === 'custom')
                             ->live(),
                     ])
                     ->columns(['default' => 1, 'md' => 4]),
