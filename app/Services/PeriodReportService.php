@@ -308,7 +308,7 @@ class PeriodReportService
         ];
     }
 
-    private function averageTemperature(Carbon $date): ?float
+    public function averageTemperature(Carbon $date): ?float
     {
         $plant = $this->aggregation->averageOutdoorTemp($date);
 
@@ -326,7 +326,7 @@ class PeriodReportService
     /**
      * Zuwachs eines kumulierten Zaehlers (Kompressor-Starts/-Stunden) an einem Tag.
      */
-    private function counterDelta(Carbon $date, string $column): ?float
+    public function counterDelta(Carbon $date, string $column): ?float
     {
         $current = $this->aggregation->lastSnapshotValue($date, $column);
         $before = $this->aggregation->lastSnapshotValue($date->copy()->subDay(), $column);
