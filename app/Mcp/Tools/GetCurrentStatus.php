@@ -110,6 +110,13 @@ class GetCurrentStatus extends Tool
                 'compressor_active' => $deviceRow?->compressor_active,
                 'compressor_phase' => $deviceRow?->compressor_phase,
             ],
+            'heating_rod' => [
+                'active' => $deviceRow?->heating_rod_active,
+                'today_heating_kwh' => $this->round($this->asFloat($deviceRow?->heating_rod_heating_kwh), 2),
+                'today_dhw_kwh' => $this->round($this->asFloat($deviceRow?->heating_rod_dhw_kwh), 2),
+                'total_starts' => $deviceRow?->heating_rod_starts,
+                'total_hours' => $this->round($this->asFloat($deviceRow?->heating_rod_hours), 1),
+            ],
             'compressor_counters' => [
                 'total_starts' => $compressorStarts !== null ? (int) $compressorStarts : null,
                 'total_hours' => $this->round($aggregation->lastSnapshotValue($today, 'compressor_hours')),

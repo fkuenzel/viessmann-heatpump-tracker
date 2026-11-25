@@ -159,6 +159,29 @@ class ApiLogResource extends Resource
             TextInput::make('compressor_phase')
                 ->label('Verdichter-Phase')
                 ->helperText('Roh-Status aus der API, z. B. "ready" oder "running".'),
+            TextInput::make('heating_rod_heating_kwh')
+                ->label('Heizstab Heizen (Tageswert)')
+                ->numeric()
+                ->step(0.01)
+                ->suffix('kWh'),
+            TextInput::make('heating_rod_dhw_kwh')
+                ->label('Heizstab Warmwasser (Tageswert)')
+                ->numeric()
+                ->step(0.01)
+                ->suffix('kWh'),
+            TextInput::make('heating_rod_starts')
+                ->label('Heizstab-Starts (kumuliert)')
+                ->numeric()
+                ->integer(),
+            TextInput::make('heating_rod_hours')
+                ->label('Heizstab-Laufzeit (kumuliert)')
+                ->numeric()
+                ->step(0.1)
+                ->suffix('h'),
+            Select::make('heating_rod_active')
+                ->label('Heizstab aktiv')
+                ->options([1 => 'EIN', 0 => 'AUS'])
+                ->native(false),
         ]);
     }
 
@@ -266,6 +289,21 @@ class ApiLogResource extends Resource
                     ->label('Verdichter')
                     ->formatStateUsing(fn (?bool $state) => $state === null ? null : ($state ? 'EIN' : 'AUS'))
                     ->badge()
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('heating_rod_heating_kwh')
+                    ->label('Heizstab Heizen')
+                    ->numeric(decimalPlaces: 2)
+                    ->suffix(' kWh')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('heating_rod_dhw_kwh')
+                    ->label('Heizstab WW')
+                    ->numeric(decimalPlaces: 2)
+                    ->suffix(' kWh')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('heating_rod_hours')
+                    ->label('Heizstab-Laufzeit')
+                    ->numeric(decimalPlaces: 1)
+                    ->suffix(' h')
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('reference_date', 'desc')
