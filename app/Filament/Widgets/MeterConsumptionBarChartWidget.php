@@ -113,18 +113,13 @@ class MeterConsumptionBarChartWidget extends ChartWidget
         }
 
         $correction = app(MeterCorrectionService::class);
-        $readings = MeterReading::query()->orderBy('timestamp')->get();
+        $pairs = MeterReading::intervalPairs();
 
         $meterTotal = 0.0;
         $appTotal = 0.0;
         $daysTotal = 0.0;
 
-        foreach ($readings as $index => $reading) {
-            if ($index === 0) {
-                continue;
-            }
-
-            $previous = $readings[$index - 1];
+        foreach ($pairs as [$previous, $reading]) {
             $result = $correction->calculate($previous, $reading);
             $days = $previous->timestamp->diffInSeconds($reading->timestamp) / 86400;
 
@@ -143,19 +138,14 @@ class MeterConsumptionBarChartWidget extends ChartWidget
     {
         $correction = app(MeterCorrectionService::class);
 
-        $readings = MeterReading::query()->orderBy('timestamp')->get();
+        $pairs = MeterReading::intervalPairs();
 
         $labels = [];
         $meterValues = [];
         $apiValues = [];
         $this->intervalDurations = [];
 
-        foreach ($readings as $index => $reading) {
-            if ($index === 0) {
-                continue;
-            }
-
-            $previous = $readings[$index - 1];
+        foreach ($pairs as [$previous, $reading]) {
             $result = $correction->calculate($previous, $reading);
 
             $labels[] = $previous->timestamp->format('d.m.') . ' - ' . $reading->timestamp->format('d.m.');

@@ -54,10 +54,8 @@ class MeterIntervalBreakdownService
      */
     public function intervalEndReadings(?Carbon $from = null, ?Carbon $to = null): Collection
     {
-        $firstId = MeterReading::query()->orderBy('timestamp')->value('id');
-
         return MeterReading::query()
-            ->when($firstId, fn ($query) => $query->where('id', '!=', $firstId))
+            ->intervalEnds()
             ->when($from, fn ($query) => $query->where('timestamp', '>=', $from->copy()->startOfDay()))
             ->when($to, fn ($query) => $query->where('timestamp', '<=', $to->copy()->endOfDay()))
             ->orderBy('timestamp')
@@ -89,6 +87,7 @@ class MeterIntervalBreakdownService
      *     dhw_cost: ?float,
      *     tariff_changed_during_interval: ?bool,
      *     reliable: ?bool,
+     *     estimated: ?bool,
      * }
      */
     public function breakdown(MeterReading $record): array
@@ -117,6 +116,7 @@ class MeterIntervalBreakdownService
             'dhw_cost' => null,
             'tariff_changed_during_interval' => null,
             'reliable' => null,
+            'estimated' => null,
         ];
 
         $previous = $this->previousReading($record);
@@ -124,6 +124,8 @@ class MeterIntervalBreakdownService
         if (! $previous) {
             return $empty;
         }
+
+        $estimated = MeterReading::pairInvolvesEstimate($previous, $record);
 
         $result = $this->correction->calculate($previous, $record);
         $meterKwh = $result['meter_kwh'];
@@ -200,7 +202,9 @@ class MeterIntervalBreakdownService
             'heating_cost' => $heatingCost,
             'dhw_cost' => $dhwCost,
             'tariff_changed_during_interval' => $costResult['tariff_changed_during_interval'],
-            'reliable' => $durationDaysRaw >= self::MIN_RELIABLE_INTERVAL_DAYS,
+            // Schaetzwerte (Grund "Schaetzwert") machen das Intervall nie belastbar.
+            'reliable' => $durationDaysRaw >= self::MIN_RELIABLE_INTERVAL_DAYS && ! $estimated,
+            'estimated' => $estimated,
         ];
     }
 

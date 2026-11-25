@@ -48,12 +48,10 @@ class MeterIntervalBreakdownWidget extends TableWidget
 
     public function table(Table $table): Table
     {
-        $firstId = MeterReading::query()->orderBy('timestamp')->value('id');
-
         return $table
             ->query(
                 MeterReading::query()
-                    ->when($firstId, fn ($query) => $query->where('id', '!=', $firstId))
+                    ->intervalEnds()
                     ->orderByDesc('timestamp')
             )
             ->columns([

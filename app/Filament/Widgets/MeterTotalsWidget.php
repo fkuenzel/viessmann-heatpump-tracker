@@ -69,13 +69,7 @@ class MeterTotalsWidget extends StatsOverviewWidget
         // Intervallgrenze doppelt gezaehlt wird.
         $countedThermalDays = [];
 
-        foreach ($readings as $index => $reading) {
-            if ($index === 0) {
-                continue;
-            }
-
-            $previous = $readings[$index - 1];
-
+        foreach (MeterReading::intervalPairs() as [$previous, $reading]) {
             $correctionResult = $correction->calculate($previous, $reading);
             $totalMeterKwh += $correctionResult['meter_kwh'];
 
