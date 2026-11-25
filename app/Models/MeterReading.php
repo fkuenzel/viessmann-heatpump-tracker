@@ -55,10 +55,11 @@ class MeterReading extends Model
     /**
      * Aufeinanderfolgende Ablesungs-Paare [von, bis] in Zeitreihenfolge. Paare,
      * deren Ende eine neue Messreihe beginnt (z. B. Zaehlertausch), entfallen.
+     * Mit $period nur Intervalle, die vollstaendig im Zeitraum liegen.
      *
      * @return Collection<int, array{0: MeterReading, 1: MeterReading}>
      */
-    public static function intervalPairs(): Collection
+    public static function intervalPairs(?\App\Support\ReportPeriod $period = null): Collection
     {
         $readings = static::query()->orderBy('timestamp')->get();
         $pairs = collect();
@@ -68,7 +69,13 @@ class MeterReading extends Model
                 continue;
             }
 
-            $pairs->push([$readings[$index - 1], $reading]);
+            $previous = $readings[$index - 1];
+
+            if ($period !== null && ! $period->containsInterval($previous->timestamp, $reading->timestamp)) {
+                continue;
+            }
+
+            $pairs->push([$previous, $reading]);
         }
 
         return $pairs;

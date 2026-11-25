@@ -98,13 +98,13 @@ class HeatingDhwSplitChartWidget extends ChartWidget
             return $this->heatingShareCache;
         }
 
-        $days = (int) ($this->pageFilters['days'] ?? 30);
+        $period = \App\Support\ReportPeriodFilters::resolve($this->pageFilters);
         $aggregation = app(ApiLogAggregationService::class);
 
-        $currentFrom = now()->subDays($days)->startOfDay();
-        $currentTo = now()->subDay()->startOfDay();
-        $previousFrom = $currentFrom->copy()->subDays($days);
-        $previousTo = $currentFrom->copy()->subDay();
+        $currentFrom = $period->from->copy();
+        $currentTo = $period->chartTo();
+        $previousFrom = $period->comparisonFrom();
+        $previousTo = $period->comparisonTo();
 
         return $this->heatingShareCache = [
             'current' => $this->heatingShareForRange($aggregation, $currentFrom, $currentTo),
@@ -144,11 +144,11 @@ class HeatingDhwSplitChartWidget extends ChartWidget
 
     protected function getData(): array
     {
-        $days = (int) ($this->pageFilters['days'] ?? 30);
+        $period = \App\Support\ReportPeriodFilters::resolve($this->pageFilters);
         $aggregation = app(ApiLogAggregationService::class);
 
-        $requestedStart = now()->subDays($days)->startOfDay();
-        $lastDay = now()->subDay()->startOfDay();
+        $requestedStart = $period->from->copy();
+        $lastDay = $period->chartTo();
 
         // Zeitraum an tatsaechlich vorhandene Daten anpassen, identisch zur
         // Logik in ConsumptionChartWidget (Abschnitt 4.2) - sonst waere die

@@ -49,6 +49,8 @@ use Illuminate\Contracts\Support\Htmlable;
  */
 class MeterConsumptionBarChartWidget extends ChartWidget
 {
+    use \Filament\Widgets\Concerns\InteractsWithPageFilters;
+
     protected static ?int $sort = 18;
 
     protected ?string $heading = 'Verbrauch je Ablese-Intervall';
@@ -113,7 +115,7 @@ class MeterConsumptionBarChartWidget extends ChartWidget
         }
 
         $correction = app(MeterCorrectionService::class);
-        $pairs = MeterReading::intervalPairs();
+        $pairs = MeterReading::intervalPairs(\App\Support\ReportPeriodFilters::resolve($this->pageFilters));
 
         $meterTotal = 0.0;
         $appTotal = 0.0;
@@ -138,7 +140,7 @@ class MeterConsumptionBarChartWidget extends ChartWidget
     {
         $correction = app(MeterCorrectionService::class);
 
-        $pairs = MeterReading::intervalPairs();
+        $pairs = MeterReading::intervalPairs(\App\Support\ReportPeriodFilters::resolve($this->pageFilters));
 
         $labels = [];
         $meterValues = [];

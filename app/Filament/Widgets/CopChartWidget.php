@@ -89,13 +89,13 @@ class CopChartWidget extends ChartWidget
             return $this->averagesCache;
         }
 
-        $days = (int) ($this->pageFilters['days'] ?? 30);
+        $period = \App\Support\ReportPeriodFilters::resolve($this->pageFilters);
         $cop = app(CopCalculationService::class);
 
-        $currentFrom = now()->subDays($days)->startOfDay();
-        $currentTo = now()->subDay()->startOfDay();
-        $previousFrom = $currentFrom->copy()->subDays($days);
-        $previousTo = $currentFrom->copy()->subDay();
+        $currentFrom = $period->from->copy();
+        $currentTo = $period->chartTo();
+        $previousFrom = $period->comparisonFrom();
+        $previousTo = $period->comparisonTo();
 
         return $this->averagesCache = [
             'current' => $this->periodAverage($this->dailyValues($cop, $currentFrom, $currentTo)),
@@ -121,7 +121,7 @@ class CopChartWidget extends ChartWidget
 
     protected function getData(): array
     {
-        $days = (int) ($this->pageFilters['days'] ?? 30);
+        $period = \App\Support\ReportPeriodFilters::resolve($this->pageFilters);
         $cop = app(CopCalculationService::class);
         $aggregation = app(ApiLogAggregationService::class);
         $correction = app(MeterCorrectionService::class);
@@ -132,8 +132,8 @@ class CopChartWidget extends ChartWidget
         $realValues = [];
         $today = [];
 
-        $requestedStart = now()->subDays($days)->startOfDay();
-        $lastDay = now()->subDay()->startOfDay();
+        $requestedStart = $period->from->copy();
+        $lastDay = $period->chartTo();
 
         // Zeitraum an tatsaechlich vorhandene Thermik-Daten anpassen, da COP
         // ohne Thermik-Snapshot nicht berechenbar ist (Abschnitt 4.10) - sonst
@@ -164,11 +164,13 @@ class CopChartWidget extends ChartWidget
         // (heute) ist ein vorlaeufiger Wert aus den bisherigen Teilwerten
         // des Tages - kein Real-Pendant, da MeterCorrectionService nur
         // abgeschlossene Ablese-Intervalle korrigiert.
-        $todayDate = now()->startOfDay();
-        $labels[] = $todayDate->format('d.m.') . ' (heute)';
-        $values[] = null;
-        $realValues[] = null;
-        $today[] = $cop->forDate($todayDate);
+        if ($period->includesToday()) {
+            $todayDate = now()->startOfDay();
+            $labels[] = $todayDate->format('d.m.') . ' (heute)';
+            $values[] = null;
+            $realValues[] = null;
+            $today[] = $cop->forDate($todayDate);
+        }
 
         return [
             'datasets' => [
