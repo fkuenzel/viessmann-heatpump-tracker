@@ -22,17 +22,24 @@ class PeriodAppKpiWidget extends StatsOverviewWidget
 
     protected ?string $heading = 'Anlagenwerte im Zeitraum (App, tagesgenau)';
 
+    private function coverage(?int $days, ?int $total): ?float
+    {
+        return ($days === null || ! $total) ? null : $days / $total;
+    }
+
     protected function getStats(): array
     {
         $period = ReportPeriodFilters::resolve($this->pageFilters);
         $data = app(PeriodReportService::class)->reportWithComparison($period);
         $cur = $data['current'];
-        $prev = $data['previous'] ?? ['app' => [], 'weather' => [], 'compressor' => [], 'heating_rod' => []];
+        $prev = $data['previous'] ?? ['period' => [], 'app' => [], 'weather' => [], 'compressor' => [], 'heating_rod' => []];
 
-        $power = $this->comparison($cur['app']['power_total_kwh'], $prev['app']['power_total_kwh'] ?? null, $period, 1, ' kWh');
-        $thermal = $this->comparison($cur['app']['thermal_total_kwh'], $prev['app']['thermal_total_kwh'] ?? null, $period, 1, ' kWh', true);
-        $cop = $this->comparison($cur['app']['cop'], $prev['app']['cop'] ?? null, $period, 2, '', true);
-        $perHdd = $this->comparison($cur['weather']['heating_kwh_per_degree_day'], $prev['weather']['heating_kwh_per_degree_day'] ?? null, $period, 2, ' kWh');
+        $powerCoverage = $this->coverage($prev['app']['power_days'] ?? null, $prev['period']['days'] ?? null);
+        $thermalCoverage = $this->coverage($prev['app']['thermal_days'] ?? null, $prev['period']['days'] ?? null);
+        $power = $this->comparison($cur['app']['power_total_kwh'], $prev['app']['power_total_kwh'] ?? null, $period, 1, ' kWh', false, $powerCoverage);
+        $thermal = $this->comparison($cur['app']['thermal_total_kwh'], $prev['app']['thermal_total_kwh'] ?? null, $period, 1, ' kWh', true, $thermalCoverage);
+        $cop = $this->comparison($cur['app']['cop'], $prev['app']['cop'] ?? null, $period, 2, '', true, $thermalCoverage);
+        $perHdd = $this->comparison($cur['weather']['heating_kwh_per_degree_day'], $prev['weather']['heating_kwh_per_degree_day'] ?? null, $period, 2, ' kWh', false, $thermalCoverage);
         $starts = $this->comparison($cur['compressor']['starts'] !== null ? (float) $cur['compressor']['starts'] : null, isset($prev['compressor']['starts']) ? (float) $prev['compressor']['starts'] : null, $period, 0);
 
         $powerDescription = 'Ø ' . $this->number($cur['app']['power_avg_per_day_kwh'], 1, ' kWh/Tag');

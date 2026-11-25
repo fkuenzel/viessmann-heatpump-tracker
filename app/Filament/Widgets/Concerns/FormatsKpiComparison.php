@@ -19,10 +19,17 @@ trait FormatsKpiComparison
      * Vergleichszeitraum, z. B. "+12,3 % (vorher 98,40 kWh)".
      *
      * @param  bool  $higherIsBetter  true = Anstieg ist gut (COP), false = Anstieg ist schlecht (Verbrauch, Kosten)
+     * @param  ?float  $previousCoverage  Anteil (0 bis 1) der Tage des Vergleichszeitraums mit Daten
      * @return array{text: ?string, color: string, icon: ?string}
      */
-    protected function comparison(?float $current, ?float $previous, ReportPeriod $period, int $decimals = 2, string $suffix = '', bool $higherIsBetter = false): array
+    protected function comparison(?float $current, ?float $previous, ReportPeriod $period, int $decimals = 2, string $suffix = '', bool $higherIsBetter = false, ?float $previousCoverage = null): array
     {
+        // Vergleichszeitraum nur teilweise mit Daten belegt (z. B. vor Messbeginn):
+        // ein Prozentwert waere irrefuehrend (+900 % bei 3 von 30 Tagen).
+        if ($period->hasComparison() && $previous !== null && $previousCoverage !== null && $previousCoverage < 0.8) {
+            return ['text' => 'Vergleich unvollständig (' . number_format($previousCoverage * 100, 0, ',', '.') . ' % der Tage mit Daten)', 'color' => 'gray', 'icon' => null];
+        }
+
         if (! $period->hasComparison() || $current === null || $previous === null) {
             return ['text' => $period->hasComparison() && $previous === null ? 'Kein Vergleichswert' : null, 'color' => 'gray', 'icon' => null];
         }

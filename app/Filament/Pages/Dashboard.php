@@ -7,13 +7,14 @@ use App\Services\ViessmannSyncService;
 use App\Services\WeatherSyncService;
 use Filament\Actions\Action;
 use App\Support\ReportPeriod;
+use App\Support\ReportPeriodFilters;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Pages\Dashboard as BaseDashboard;
 use Filament\Pages\Dashboard\Concerns\HasFiltersForm;
 use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 
 /**
@@ -43,6 +44,9 @@ class Dashboard extends BaseDashboard
         return $schema
             ->components([
                 Section::make()
+                    ->compact()
+                    ->columnSpanFull()
+                    ->extraAttributes(['class' => 'w-full'])
                     ->schema([
                         Select::make('preset')
                             ->label('Zeitraum')
@@ -50,21 +54,35 @@ class Dashboard extends BaseDashboard
                             ->default('last_30')
                             ->selectablePlaceholder(false)
                             ->native(false)
-                            ->live(),
+                            ->live()
+                            // Voreinstellung wählen: Von/Bis zeigen den aufgelösten Zeitraum,
+                            // so wie bei Google Analytics.
+                            ->afterStateUpdated(function (string $state, Set $set): void {
+                                if ($state === 'custom') {
+                                    return;
+                                }
+
+                                $period = ReportPeriodFilters::resolve(['preset' => $state]);
+                                $set('from', $period->from->toDateString());
+                                $set('to', $period->to->toDateString());
+                            }),
                         DatePicker::make('from')
                             ->label('Von')
                             ->native(false)
                             ->displayFormat('d.m.Y')
                             ->maxDate(now())
-                            ->visible(fn (Get $get): bool => $get('preset') === 'custom')
-                            ->live(),
+                            ->default(fn () => ReportPeriod::forPreset('last_30')->from->toDateString())
+                            ->live()
+                            // Datum von Hand ändern: automatisch "Benutzerdefiniert".
+                            ->afterStateUpdated(fn (Set $set) => $set('preset', 'custom')),
                         DatePicker::make('to')
                             ->label('Bis')
                             ->native(false)
                             ->displayFormat('d.m.Y')
                             ->maxDate(now())
-                            ->visible(fn (Get $get): bool => $get('preset') === 'custom')
-                            ->live(),
+                            ->default(fn () => ReportPeriod::forPreset('last_30')->to->toDateString())
+                            ->live()
+                            ->afterStateUpdated(fn (Set $set) => $set('preset', 'custom')),
                         Select::make('compare')
                             ->label('Vergleich mit')
                             ->options(ReportPeriod::COMPARE_MODES)

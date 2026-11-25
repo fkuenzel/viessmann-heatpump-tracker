@@ -33,10 +33,11 @@ class PeriodMeterKpiWidget extends StatsOverviewWidget
         $meter = $data['current']['meter'];
         $before = $data['previous']['meter'] ?? [];
 
-        $consumption = $this->comparison($meter['consumption_kwh'], $before['consumption_kwh'] ?? null, $period, 1, ' kWh');
-        $cost = $this->comparison($meter['cost_eur'], $before['cost_eur'] ?? null, $period, 2, ' €');
-        $cop = $this->comparison($meter['cop'], $before['cop'] ?? null, $period, 2, '', true);
-        $thermal = $this->comparison($meter['thermal_kwh'], $before['thermal_kwh'] ?? null, $period, 1, ' kWh', true);
+        $coverage = $before['coverage_ratio'] ?? null;
+        $consumption = $this->comparison($meter['consumption_kwh'], $before['consumption_kwh'] ?? null, $period, 1, ' kWh', false, $coverage);
+        $cost = $this->comparison($meter['cost_eur'], $before['cost_eur'] ?? null, $period, 2, ' €', false, $coverage);
+        $cop = $this->comparison($meter['cop'], $before['cop'] ?? null, $period, 2, '', true, $coverage);
+        $thermal = $this->comparison($meter['thermal_kwh'], $before['thermal_kwh'] ?? null, $period, 1, ' kWh', true, $coverage);
 
         $stats = [
             Stat::make('Verbrauch (Zähler)', $this->number($meter['consumption_kwh'], 1, ' kWh'))
