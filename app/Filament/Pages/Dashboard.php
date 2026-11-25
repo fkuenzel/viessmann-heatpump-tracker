@@ -6,10 +6,14 @@ use App\Services\ViessmannApiClient;
 use App\Services\ViessmannSyncService;
 use App\Services\WeatherSyncService;
 use Filament\Actions\Action;
+use App\Support\ReportPeriod;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Pages\Dashboard as BaseDashboard;
 use Filament\Pages\Dashboard\Concerns\HasFiltersForm;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 
 /**
@@ -38,15 +42,38 @@ class Dashboard extends BaseDashboard
     {
         return $schema
             ->components([
-                Select::make('days')
-                    ->label('Zeitraum')
-                    ->options([
-                        '7' => 'Letzte 7 Tage',
-                        '30' => 'Letzte 30 Tage',
-                        '90' => 'Letzte 90 Tage',
+                Section::make()
+                    ->schema([
+                        Select::make('preset')
+                            ->label('Zeitraum')
+                            ->options(ReportPeriod::PRESETS)
+                            ->default('last_30')
+                            ->selectablePlaceholder(false)
+                            ->native(false)
+                            ->live(),
+                        DatePicker::make('from')
+                            ->label('Von')
+                            ->native(false)
+                            ->displayFormat('d.m.Y')
+                            ->maxDate(now())
+                            ->visible(fn (Get $get): bool => $get('preset') === 'custom')
+                            ->live(),
+                        DatePicker::make('to')
+                            ->label('Bis')
+                            ->native(false)
+                            ->displayFormat('d.m.Y')
+                            ->maxDate(now())
+                            ->visible(fn (Get $get): bool => $get('preset') === 'custom')
+                            ->live(),
+                        Select::make('compare')
+                            ->label('Vergleich mit')
+                            ->options(ReportPeriod::COMPARE_MODES)
+                            ->default('previous')
+                            ->selectablePlaceholder(false)
+                            ->native(false)
+                            ->live(),
                     ])
-                    ->default('30')
-                    ->selectablePlaceholder(false),
+                    ->columns(['default' => 1, 'md' => 4]),
             ]);
     }
 

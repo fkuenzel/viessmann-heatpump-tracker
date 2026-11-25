@@ -79,13 +79,13 @@ class TotalThermalChartWidget extends ChartWidget
             return $this->averagesCache;
         }
 
-        $days = (int) ($this->pageFilters['days'] ?? 30);
+        $period = \App\Support\ReportPeriodFilters::resolve($this->pageFilters);
         $aggregation = app(ApiLogAggregationService::class);
 
-        $currentFrom = now()->subDays($days)->startOfDay();
-        $currentTo = now()->subDay()->startOfDay();
-        $previousFrom = $currentFrom->copy()->subDays($days);
-        $previousTo = $currentFrom->copy()->subDay();
+        $currentFrom = $period->from->copy();
+        $currentTo = $period->chartTo();
+        $previousFrom = $period->comparisonFrom();
+        $previousTo = $period->comparisonTo();
 
         return $this->averagesCache = [
             'current' => $this->periodAverage($this->dailyValues($aggregation, $currentFrom, $currentTo)),
@@ -114,15 +114,15 @@ class TotalThermalChartWidget extends ChartWidget
 
     protected function getData(): array
     {
-        $days = (int) ($this->pageFilters['days'] ?? 30);
+        $period = \App\Support\ReportPeriodFilters::resolve($this->pageFilters);
         $aggregation = app(ApiLogAggregationService::class);
 
         $labels = [];
         $total = [];
         $today = [];
 
-        $requestedStart = now()->subDays($days)->startOfDay();
-        $lastDay = now()->subDay()->startOfDay();
+        $requestedStart = $period->from->copy();
+        $lastDay = $period->chartTo();
 
         $earliest = $aggregation->earliestReferenceDate([
             'thermal_heating_kwh', 'thermal_dhw_kwh',
@@ -147,12 +147,14 @@ class TotalThermalChartWidget extends ChartWidget
 
         // Laufender Tag als abgesetzter Punkt - siehe
         // TotalConsumptionChartWidget-Docblock fuer die Begruendung.
-        $todayDate = now()->startOfDay();
-        $todayHeating = $aggregation->lastSnapshotValue($todayDate, 'thermal_heating_kwh');
-        $todayDhw = $aggregation->lastSnapshotValue($todayDate, 'thermal_dhw_kwh');
-        $labels[] = $todayDate->format('d.m.') . ' (heute)';
-        $total[] = null;
-        $today[] = ($todayHeating === null && $todayDhw === null) ? null : ($todayHeating ?? 0) + ($todayDhw ?? 0);
+        if ($period->includesToday()) {
+            $todayDate = now()->startOfDay();
+            $todayHeating = $aggregation->lastSnapshotValue($todayDate, 'thermal_heating_kwh');
+            $todayDhw = $aggregation->lastSnapshotValue($todayDate, 'thermal_dhw_kwh');
+            $labels[] = $todayDate->format('d.m.') . ' (heute)';
+            $total[] = null;
+            $today[] = ($todayHeating === null && $todayDhw === null) ? null : ($todayHeating ?? 0) + ($todayDhw ?? 0);
+        }
 
         return [
             'datasets' => [

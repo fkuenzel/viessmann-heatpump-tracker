@@ -40,6 +40,8 @@ use Illuminate\Contracts\Support\Htmlable;
  */
 class MeterDeviationPercentChartWidget extends ChartWidget
 {
+    use \Filament\Widgets\Concerns\InteractsWithPageFilters;
+
     protected static ?int $sort = 19;
 
     protected ?string $heading = 'Abweichung Zähler ↔ App';
@@ -89,7 +91,7 @@ class MeterDeviationPercentChartWidget extends ChartWidget
         $this->averageComputed = true;
 
         $correction = app(MeterCorrectionService::class);
-        $pairs = MeterReading::intervalPairs();
+        $pairs = MeterReading::intervalPairs(\App\Support\ReportPeriodFilters::resolve($this->pageFilters));
 
         $values = [];
 
@@ -108,7 +110,7 @@ class MeterDeviationPercentChartWidget extends ChartWidget
     {
         $correction = app(MeterCorrectionService::class);
 
-        $pairs = MeterReading::intervalPairs();
+        $pairs = MeterReading::intervalPairs(\App\Support\ReportPeriodFilters::resolve($this->pageFilters));
 
         $labels = [];
         $deviationValues = [];
