@@ -22,7 +22,7 @@ use Laravel\Mcp\Server\Attributes\Version;
  * das Zugangsdaten oder Tokens liest oder schreibt.
  */
 #[Name('Viessmann Heatpump Tracker (schreibend)')]
-#[Version('1.2.1')]
+#[Version('2.0.0')]
 #[Instructions(<<<'TEXT'
 Dieser Server stellt die Messdaten einer Viessmann-Wärmepumpe rein lesend bereit (Stromverbrauch, thermische Energie, COP, Zählerstände, Kompressor, Wetter, Heizstab, Tarife, Einstellungen). Dieser Endpoint kann zusätzlich Daten in der Anwendung ändern (siehe unten). Er steuert die Wärmepumpe nicht und liest oder schreibt keine Zugangsdaten.
 
