@@ -31,6 +31,36 @@ class ApiLogAggregationService
      */
     public function dailyPowerValue(Carbon $date, string $column): ?float
     {
+        $raw = $this->resolvedValueForDate($date, $column);
+
+        if ($column !== 'power_total_kwh') {
+            return $raw;
+        }
+
+        // Die API liefert den Gesamtwert teils kleiner als Heizen + Warmwasser
+        // (beobachtet an 4 von 36 Tagen, z. B. 04.11.2026: 22,7 < 21,7 + 2,1).
+        // Ein Gesamtverbrauch unterhalb der Teilsummen ist physikalisch
+        // unmoeglich - daher gilt der groessere Wert. Die gespeicherten
+        // Rohwerte bleiben unveraendert (siehe rawDailyValue()).
+        $heating = $this->resolvedValueForDate($date, 'power_heating_kwh');
+        $dhw = $this->resolvedValueForDate($date, 'power_dhw_kwh');
+
+        if ($heating === null && $dhw === null) {
+            return $raw;
+        }
+
+        $partsSum = ($heating ?? 0.0) + ($dhw ?? 0.0);
+
+        return $raw === null ? $partsSum : max($raw, $partsSum);
+    }
+
+    /**
+     * Unkorrigierter, so gespeicherter Tageswert einer Spalte. Fuer die
+     * Aenderungserkennung beim Sync, damit der Gesamtwert-Fallback aus
+     * dailyPowerValue() keine Rohdaten-Vergleiche verfaelscht.
+     */
+    public function rawDailyValue(Carbon $date, string $column): ?float
+    {
         return $this->resolvedValueForDate($date, $column);
     }
 
@@ -101,6 +131,44 @@ class ApiLogAggregationService
      */
     public function weightedSum(Carbon $from, Carbon $to, string $column): array
     {
+        return $this->weightedAggregate(
+            $from,
+            $to,
+            fn (Carbon $day): ?float => $this->dailyPowerValue($day, $column),
+            [$column],
+        );
+    }
+
+    /**
+     * Thermische Energie (Heizen + Warmwasser) ueber ein Zeitintervall mit
+     * derselben Randgewichtung wie weightedSum(). Frueher wurden Randtage
+     * der Thermik voll, der Strom aber anteilig gezaehlt - das verzerrte den
+     * COP bei kurzen Intervallen (z. B. App-COP 7,0 statt rund 4,6).
+     *
+     * @return array{value: ?float, missing_dates: array<string>}
+     */
+    public function weightedThermalSum(Carbon $from, Carbon $to): array
+    {
+        return $this->weightedAggregate(
+            $from,
+            $to,
+            function (Carbon $day): ?float {
+                $heating = $this->lastSnapshotValue($day, 'thermal_heating_kwh');
+                $dhw = $this->lastSnapshotValue($day, 'thermal_dhw_kwh');
+
+                return ($heating === null && $dhw === null) ? null : ($heating ?? 0.0) + ($dhw ?? 0.0);
+            },
+            ['thermal_heating_kwh', 'thermal_dhw_kwh'],
+        );
+    }
+
+    /**
+     * @param  callable(Carbon): ?float  $dayValue
+     * @param  array<string>  $coverageColumns Spalten, anhand derer die Abdeckung des laufenden Tages bestimmt wird
+     * @return array{value: ?float, missing_dates: array<string>}
+     */
+    private function weightedAggregate(Carbon $from, Carbon $to, callable $dayValue, array $coverageColumns): array
+    {
         $sum = 0.0;
         $missingDates = [];
         $hasAnyValue = false;
@@ -109,9 +177,9 @@ class ApiLogAggregationService
         $lastDay = $to->copy()->startOfDay();
 
         while ($cursor->lessThanOrEqualTo($lastDay)) {
-            $dayValue = $this->dailyPowerValue($cursor, $column);
+            $value = $dayValue($cursor);
 
-            if ($dayValue === null) {
+            if ($value === null) {
                 $missingDates[] = $cursor->toDateString();
                 $cursor->addDay();
 
@@ -119,8 +187,7 @@ class ApiLogAggregationService
             }
 
             $hasAnyValue = true;
-            $fraction = $this->dayFraction($cursor, $from, $to);
-            $sum += $dayValue * $fraction;
+            $sum += $value * $this->dayFraction($cursor, $from, $to, $this->coverageEnd($cursor, $coverageColumns));
 
             $cursor->addDay();
         }
@@ -132,22 +199,56 @@ class ApiLogAggregationService
     }
 
     /**
-     * Anteil eines Kalendertags, der innerhalb des [from, to]-Intervalls liegt
-     * (proportionale Rand-Intervall-Methode aus Fahrplan Abschnitt 6).
+     * Bis wann ein Tageswert tatsaechlich Daten enthaelt. Ein Wert, der am
+     * selben Tag noch als laufender Tag (day_index 0) gepullt wurde, deckt nur
+     * 00:00 Uhr bis zum Pull-Zeitpunkt ab. Abgeschlossene Tage liefern null
+     * (= ganzer Tag).
+     *
+     * @param  array<string>  $columns
      */
-    private function dayFraction(Carbon $day, Carbon $from, Carbon $to): float
+    private function coverageEnd(Carbon $day, array $columns): ?Carbon
     {
         $dayStart = $day->copy()->startOfDay();
-        $dayEnd = $day->copy()->endOfDay()->addSecond(); // exklusive Grenze zum naechsten Tag
+
+        foreach ($columns as $column) {
+            $row = $this->resolvedRowForDate($dayStart, $column);
+
+            if ($row === null) {
+                continue;
+            }
+
+            if ($row->day_index === 0 && $row->timestamp->lessThan($dayStart->copy()->addDay())) {
+                return $row->timestamp;
+            }
+
+            return null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Anteil des Tageswerts, der auf das [from, to]-Intervall entfaellt. Bei
+     * einem laufenden Tag (coverageEnd gesetzt) bezieht sich der Wert nur auf
+     * den Zeitraum bis coverageEnd, nicht auf 24 Stunden.
+     */
+    private function dayFraction(Carbon $day, Carbon $from, Carbon $to, ?Carbon $coverageEnd = null): float
+    {
+        $dayStart = $day->copy()->startOfDay();
+        $dayEnd = $dayStart->copy()->addDay(); // exklusive Grenze zum naechsten Tag
+
+        $spanEnd = ($coverageEnd !== null && $coverageEnd->lessThan($dayEnd)) ? $coverageEnd : $dayEnd;
 
         $windowStart = $from->greaterThan($dayStart) ? $from : $dayStart;
-        $windowEnd = $to->lessThan($dayEnd) ? $to : $dayEnd;
+        $windowEnd = $to->lessThan($spanEnd) ? $to : $spanEnd;
 
-        if ($windowEnd->lessThanOrEqualTo($windowStart)) {
+        $spanSeconds = $dayStart->diffInSeconds($spanEnd);
+
+        if ($spanSeconds <= 0 || $windowEnd->lessThanOrEqualTo($windowStart)) {
             return 0.0;
         }
 
-        return $windowStart->diffInSeconds($windowEnd) / 86400;
+        return $windowStart->diffInSeconds($windowEnd) / $spanSeconds;
     }
 
     /**

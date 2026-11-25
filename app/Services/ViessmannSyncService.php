@@ -173,6 +173,11 @@ class ViessmannSyncService
                 'secondary_flow_temp' => $dayIndex === 0 ? ($deviceStatus['secondary_flow_temp'] ?? null) : null,
                 'compressor_active' => $dayIndex === 0 ? ($deviceStatus['compressor_active'] ?? null) : null,
                 'compressor_phase' => $dayIndex === 0 ? ($deviceStatus['compressor_phase'] ?? null) : null,
+                'heating_rod_heating_kwh' => $dayIndex === 0 ? ($deviceStatus['heating_rod_heating_kwh'] ?? null) : null,
+                'heating_rod_dhw_kwh' => $dayIndex === 0 ? ($deviceStatus['heating_rod_dhw_kwh'] ?? null) : null,
+                'heating_rod_starts' => $dayIndex === 0 ? ($deviceStatus['heating_rod_starts'] ?? null) : null,
+                'heating_rod_hours' => $dayIndex === 0 ? ($deviceStatus['heating_rod_hours'] ?? null) : null,
+                'heating_rod_active' => $dayIndex === 0 ? ($deviceStatus['heating_rod_active'] ?? null) : null,
             ]);
 
             $written++;
@@ -218,7 +223,7 @@ class ViessmannSyncService
     private function valuesUnchanged(Carbon $resolvedDate, array $newValues): bool
     {
         foreach ($newValues as $column => $newValue) {
-            $existing = $this->aggregation->dailyPowerValue($resolvedDate, $column);
+            $existing = $this->aggregation->rawDailyValue($resolvedDate, $column);
 
             if ($existing === null && $newValue === null) {
                 continue;

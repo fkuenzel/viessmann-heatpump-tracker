@@ -32,6 +32,11 @@ class ApiLog extends Model
         'secondary_flow_temp',
         'compressor_active',
         'compressor_phase',
+        'heating_rod_heating_kwh',
+        'heating_rod_dhw_kwh',
+        'heating_rod_starts',
+        'heating_rod_hours',
+        'heating_rod_active',
     ];
 
     protected function casts(): array
@@ -54,6 +59,11 @@ class ApiLog extends Model
             'volumetric_flow' => 'decimal:1',
             'secondary_flow_temp' => 'decimal:2',
             'compressor_active' => 'boolean',
+            'heating_rod_heating_kwh' => 'decimal:2',
+            'heating_rod_dhw_kwh' => 'decimal:2',
+            'heating_rod_starts' => 'integer',
+            'heating_rod_hours' => 'decimal:2',
+            'heating_rod_active' => 'boolean',
         ];
     }
 

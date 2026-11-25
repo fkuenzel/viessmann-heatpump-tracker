@@ -414,6 +414,11 @@ class ViessmannApiClient
      *     compressor_phase: ?string,
      *     compressor_starts: ?int,
      *     compressor_hours: ?float,
+     *     heating_rod_heating_kwh: ?float,
+     *     heating_rod_dhw_kwh: ?float,
+     *     heating_rod_starts: ?int,
+     *     heating_rod_hours: ?float,
+     *     heating_rod_active: ?bool,
      * }
      */
     public function getDeviceStatus(): array
@@ -426,6 +431,7 @@ class ViessmannApiClient
 
         $starts = $value('heating.compressors.0.statistics', 'starts');
         $hours = $value('heating.compressors.0.statistics', 'hours');
+        $rodStarts = $value('heating.heatingRod.statistics', 'starts');
 
         return [
             'flow_temp' => $this->toFloat($value('heating.boiler.sensors.temperature.commonSupply')),
@@ -438,6 +444,11 @@ class ViessmannApiClient
             'compressor_phase' => $value('heating.compressors.0', 'phase'),
             'compressor_starts' => $starts === null ? null : (int) $starts,
             'compressor_hours' => $this->toFloat($hours),
+            'heating_rod_heating_kwh' => $this->toFloat($value('heating.heatingRod.power.consumption.summary.heating', 'currentDay')),
+            'heating_rod_dhw_kwh' => $this->toFloat($value('heating.heatingRod.power.consumption.summary.dhw', 'currentDay')),
+            'heating_rod_starts' => $rodStarts === null ? null : (int) $rodStarts,
+            'heating_rod_hours' => $this->toFloat($value('heating.heatingRod.statistics', 'hours')),
+            'heating_rod_active' => $value('heating.heatingRod', 'active'),
         ];
     }
 
