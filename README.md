@@ -64,6 +64,16 @@ Diese Punkte sind keine Voraussetzung für den ersten lauffähigen Zustand und w
 
 Zählerstände werden anschließend über **Zählerstände** mit frei wählbarem Zeitpunkt erfasst.
 
+## Dashboard, Zeitraum und Auswertungen (ab Version 2.0.0)
+
+- **Zeitraumfilter:** Oben im Dashboard und auf allen Auswertungsseiten wählbar (7/30/90 Tage, Monat, Vormonat, Jahr, Vorjahr, gesamt oder benutzerdefiniert), mit Vergleich direkt daneben (Vorperiode, Vorjahr, keiner). Alle Kacheln und Diagramme folgen dem Filter.
+- **App-Werte** (Viessmann-API) gelten tagesgenau. **Zählerwerte** (Verbrauch, Kosten, echter COP) kommen nur aus vollständig im Zeitraum liegenden Ablese-Intervallen, die Abdeckung wird angezeigt ("X von Y Tagen"). Vergleiche von Summen erfolgen nur bei gleich langen, zu mindestens 80 Prozent belegten Zeiträumen, sonst werden Tageswerte und Verhältniszahlen verglichen.
+- **Witterungsbereinigung:** Heizgradtage (Gradtagzahl 20/15) und kWh je Heizgradtag.
+- **Auswertungen** (eigene Navigationsgruppe): Periodenvergleich, Wirkung von Einstellungsänderungen (n Tage vor und nach einer Notiz), Effizienz nach Außentemperatur, Warmwasser, Kosten und Jahresprognose, Kompressor und Takten, Datenqualität.
+- **Kosten und Jahresprognose** nutzt unter **Einstellungen → Abrechnung und Plan** den Beginn des Abrechnungsjahres, den geplanten Jahresverbrauch und den monatlichen Abschlag. Deckt die Zählererfassung nur einen Teil des Abrechnungsjahres ab, ist die Prognose als unsicher gekennzeichnet.
+- **Zählerstände** haben ein Feld **Grund** (Regelablesung, Endablesung, Zählertausch, Startwert, Schätzwert, Sonstiges u. a.). Zählertausch und Startwert beginnen eine neue Messreihe, Schätzwerte markieren angrenzende Intervalle als unsicher. Die Oberfläche warnt bei sinkenden Zählerständen und auffälligem Korrekturfaktor.
+- **Heizstab:** Energie, Starts, Laufzeit und Status werden miterfasst und sind unter **Anlagenwerte** nachtragbar.
+
 ## Konfigurationsverlauf (ab Version 1.2.0)
 
 Bei jedem Sync prüft die Anwendung Heizkurve, Vorlauftemperatur-Grenzen, Soll-Raumtemperaturen, Zeitprogramme (Heizen und Warmwasser), Warmwasser-Einstellungen, Sommerbetrieb, Betriebsarten, Standby, Ferienprogramm, die §14a-Leistungsbegrenzung und die Parameter-Version. Dafür sind keine zusätzlichen API-Anfragen nötig, die Werte stammen aus der ohnehin abgerufenen Feature-Liste.
@@ -74,6 +84,19 @@ Bei jedem Sync prüft die Anwendung Heizkurve, Vorlauftemperatur-Grenzen, Soll-R
 - Der Zeitpunkt ist nur auf das Sync-Intervall (15 Minuten) genau, da die API keinen echten Änderungszeitpunkt liefert.
 
 Beim Update auf 1.2.0 muss einmalig `php artisan migrate` ausgeführt werden.
+
+## Update auf 2.0.0
+
+Alle Migrationen von 2.0.0 sind rein ergänzend (neue Spalten in `api_log` und `meter_readings`, neue Tabelle `mcp_audit_log`); bestehende Daten werden nicht verändert oder gelöscht. Bestehende Zählerstände erhalten automatisch den Grund "Regelablesung", der älteste den Grund "Startwert".
+
+1. **Backup:** SQLite-Datei sichern (`/system/run/db-backup?token=...` oder Datei kopieren).
+2. Code aktualisieren: `git pull` (bzw. auf den Tag `2.0.0` wechseln), `composer install --no-dev --optimize-autoloader`.
+3. `php artisan migrate --force` (oder `/system/run/migrate?token=...`).
+4. Caches leeren: `php artisan optimize:clear` (oder `config-clear` und `cache-clear` über den Runner).
+5. Optional den schreibenden MCP-Zugang einrichten (siehe unten) und den MCP-Connector in Claude neu verbinden, damit die neue Tool-Liste erscheint.
+6. Einmal "Jetzt synchronisieren" ausführen und prüfen, dass Dashboard und Auswertungen laden. Danach unter **Einstellungen → Abrechnung und Plan** Abrechnungsjahr, Jahresplan und Abschlag eintragen.
+
+Eine lokale Datenbank darf **nie** auf den Server zurückgespielt werden. Rollback: Code auf den Tag `v1.2.1` zurücksetzen und die gesicherte SQLite-Datei zurückkopieren (die zusätzlichen Spalten stören ältere Versionen nicht, ein Zurückspielen der Sicherung ist aber der sauberste Weg).
 
 ## Bekannte Einschränkungen
 
@@ -143,9 +166,9 @@ Legt eine Kopie unter `storage/app/backups/` ab und entfernt automatisch Kopien 
 - Frischer Stand zum lokalen Debuggen: Server-`database.sqlite` per FTP herunterladen, nur lesend lokal verwenden.
 - Viessmann-OAuth: Redirect-URI im Developer-Portal auf `https://<domain>/viessmann/callback` umstellen bzw. ergänzen und einmalig `https://<domain>/viessmann/connect` aufrufen, um die Tokens für die neue Domain neu auszustellen.
 
-## MCP-Anbindung (ab Version 1.1.0)
+## MCP-Anbindung (ab Version 1.1.0, erweitert in 2.0.0)
 
-Die Anwendung stellt ihre Daten über einen MCP-Server bereit, sodass Claude (oder jeder andere MCP-Client) Heizungsdaten direkt abfragen kann. Der Zugriff ist ausschließlich lesend; es gibt keine Tools, die Daten schreiben, löschen oder einen Sync anstoßen.
+Die Anwendung stellt ihre Daten über einen MCP-Server bereit, sodass Claude (oder jeder andere MCP-Client) Heizungsdaten direkt abfragen kann. Der Endpunkt `/mcp` ist ausschließlich lesend. Schreibzugriff gibt es seit 2.0.0 nur über den getrennten Endpunkt `/mcp/write` (siehe unten).
 
 ### Einrichtung
 
@@ -172,8 +195,33 @@ Der Endpunkt lautet `POST https://<domain>/mcp` (Streamable HTTP). Authentifizie
 | `get_compressor_stats` | Tägliche Starts und Laufzeit des Kompressors, Durchschnitte |
 | `get_weather_comparison` | Externe Temperatur gegenüber Anlagensensor sowie Kurzfrist-Prognose |
 | `get_annotations` | Notizen im Zeitraum (manuell und automatisch erfasste Einstellungsänderungen), optional nach Kategorie |
+| `get_period_report` | Kennzahlen eines Zeitraums wie im Dashboard (App- und Zählerwerte, Abdeckung, Heizgradtage, Kompressor, Heizstab), optional mit Vergleichszeitraum |
+| `get_temperature_efficiency` | COP und Verbrauch je Tag und je Außentemperatur-Klasse (2 K) |
+| `get_change_impact` | n Tage vor und nach einem Zeitpunkt (z. B. Einstellungsänderung) im Vergleich |
+| `get_data_quality` | Tage ohne Daten, Sync-Lücken, Ablese-Intervalle mit Korrekturfaktor |
+| `get_cost_outlook` | Kosten, Hochrechnung, Abrechnungsjahr gegen Plan und Abschläge |
+| `get_meter_readings` | Erfasste Zählerstände mit Grund, Quelle und Notiz |
+| `get_tariffs` | Hinterlegte Stromtarife |
+| `get_settings` | Per MCP lesbare und änderbare Einstellungen (ohne Zugangsdaten) |
 
 Die Ausgaben unterscheiden durchgehend zwischen App-Werten (Viessmann-API) und zählerbasierten Werten. Fehlende Daten werden als `null` geliefert, nie als 0. Zeiträume sind begrenzt (maximal 90 bzw. 92 Tage).
+
+### Schreibender Endpunkt (ab Version 2.0.0)
+
+Für Änderungen gibt es einen eigenen Endpunkt `POST https://<domain>/mcp/write` mit separatem Token. Er enthält alle Lese-Tools sowie `get_audit_log` und die Schreib-Tools:
+
+| Tool | Wirkung |
+|---|---|
+| `add_meter_reading` | Zählerstand erfassen (Grund, Notiz), mit denselben Prüfungen wie die Oberfläche und Plausibilitätshinweisen |
+| `add_annotation` | Notiz anlegen |
+| `add_tariff` | Stromtarif mit Gültigkeitsbeginn anlegen (kein zweiter Tarif mit gleichem Beginn) |
+| `update_setting` | Einstellung aus einer Positivliste ändern (Abrechnungsjahr, Jahresplan, Abschlag, Anomalie-Schwellen, Report-Häufigkeit u. a.) |
+| `add_plant_values` | Momentaufnahme-Werte eines vergangenen Tages nachtragen (ein Nachtrag je Tag) |
+| `trigger_sync` | Datenabruf auslösen, frühestens alle 5 Minuten |
+
+Grundsätze: Es gibt kein Tool, das die Wärmepumpe steuert (keine Sollwerte, Zeitprogramme oder Heizkurve), keines, das Zugangsdaten, OAuth-Tokens oder Mail-Empfänger liest oder schreibt, und keines, das Daten löscht (Löschen nur in der Oberfläche). Jede Schreibaktion wird mit Eingabe sowie Zustand vorher und nachher in `mcp_audit_log` protokolliert und ist über `get_audit_log` einsehbar.
+
+Einrichtung: eigenen Token erzeugen (mindestens 32 Zeichen, verschieden von `MCP_API_TOKEN` und `ARTISAN_RUNNER_TOKEN`), als `MCP_WRITE_TOKEN` in die `.env` eintragen und den Endpunkt wie unten beschrieben als eigenen Client (z. B. `heatpump-write`) einbinden. Ohne gültiges Token ist der Endpunkt deaktiviert (404). Rate-Limit: 20 Anfragen pro Minute und IP.
 
 ### Client einrichten
 
@@ -203,7 +251,7 @@ Die Ausgaben unterscheiden durchgehend zwischen App-Werten (Viessmann-API) und z
 
 - Vergleich des Tokens zeitkonstant (`hash_equals`), fehlgeschlagene Versuche werden ohne Token-Inhalt protokolliert.
 - In `APP_ENV=production` werden Aufrufe ohne HTTPS mit 403 abgewiesen.
-- Rate-Limit: 120 Anfragen pro Minute und IP.
+- Rate-Limit: 120 Anfragen pro Minute und IP (Schreib-Endpunkt: 20).
 - Auf Servern mit Apache/CGI muss der `Authorization`-Header an PHP durchgereicht werden. Das mitgelieferte `public/.htaccess` von Laravel übernimmt das; bei Problemen (401 trotz korrektem Token) die entsprechende Rewrite-Regel prüfen.
 - Das Token gewährt Lesezugriff auf sämtliche Verbrauchs- und Gerätedaten. Bei Verdacht auf Weitergabe in der `.env` austauschen.
 - Da `laravel/mcp` ab 1.1.0 unter `require` steht, muss beim Deployment ohne SSH das lokale `composer install --no-dev --optimize-autoloader` nach dem Update erneut ausgeführt und `vendor/` neu hochgeladen werden.
@@ -218,7 +266,7 @@ Die Ausgaben unterscheiden durchgehend zwischen App-Werten (Viessmann-API) und z
 - **Chart.js** (über Filaments Chart-Widgets) – Diagramme für Verbrauch, COP und Temperaturvergleich
 - **Tailwind CSS** – Styling-Grundlage von Filament
 - **Guzzle** – HTTP-Client für die Viessmann-API-Anbindung
-- **[laravel/mcp](https://github.com/laravel/mcp)** – MCP-Server für den lesenden Zugriff durch Claude
+- **[laravel/mcp](https://github.com/laravel/mcp)** – MCP-Server für den Zugriff durch Claude (lesend, optional schreibend)
 
 ## Lizenz
 
