@@ -25,6 +25,7 @@ class AppServiceProvider extends ServiceProvider
         // Rate-Limit für den MCP-Endpoint (routes/ai.php): pro IP, großzügig
         // genug für einen LLM-Client (Handshake + mehrere Tool-Aufrufe pro
         // Frage), eng genug, um Token-Raten praktisch auszuschließen.
+        RateLimiter::for('mcp-write', fn (Request $request): Limit => Limit::perMinute(20)->by($request->ip()));
         RateLimiter::for('mcp', fn (Request $request): Limit => Limit::perMinute(120)->by($request->ip()));
     }
 }

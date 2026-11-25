@@ -49,6 +49,10 @@ return [
         // Bewusst getrennt vom artisan_runner-Token: ein kompromittierter
         // MCP-Zugriff soll keinen Zugriff auf den Scheduler-Ersatz geben.
         'token' => env('MCP_API_TOKEN'),
+
+        // Eigener Bearer-Token fuer den schreibenden Endpoint (POST /mcp/write).
+        // Leer, kuerzer als 32 Zeichen oder gleich dem Lese-Token = deaktiviert.
+        'write_token' => env('MCP_WRITE_TOKEN'),
     ],
 
 ];

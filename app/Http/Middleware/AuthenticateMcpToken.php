@@ -34,16 +34,25 @@ class AuthenticateMcpToken
     /**
      * @param  Closure(Request): Response  $next
      */
-    public function handle(Request $request, Closure $next): Response
+    public function handle(Request $request, Closure $next, string $scope = 'read'): Response
     {
-        $expectedToken = (string) config('services.mcp.token');
+        // "read": /mcp (nur lesende Tools), "write": /mcp/write (eigener Token,
+        // schreibende Tools). Die Tokens duerfen nicht identisch sein, sonst
+        // waere der getrennte Schreibzugriff wirkungslos.
+        $expectedToken = (string) config($scope === 'write' ? 'services.mcp.write_token' : 'services.mcp.token');
+
+        if ($scope === 'write' && hash_equals((string) config('services.mcp.token'), $expectedToken)) {
+            Log::error('MCP-Schreib-Endpoint deaktiviert: MCP_WRITE_TOKEN darf nicht dem MCP_API_TOKEN entsprechen.');
+
+            return response()->json(['message' => 'Not Found'], Response::HTTP_NOT_FOUND);
+        }
 
         if ($expectedToken === '') {
             return response()->json(['message' => 'Not Found'], Response::HTTP_NOT_FOUND);
         }
 
         if (strlen($expectedToken) < self::MIN_TOKEN_LENGTH) {
-            Log::error('MCP-Endpoint deaktiviert: MCP_API_TOKEN ist kürzer als ' . self::MIN_TOKEN_LENGTH . ' Zeichen.');
+            Log::error('MCP-Endpoint deaktiviert: Token (' . $scope . ') ist kürzer als ' . self::MIN_TOKEN_LENGTH . ' Zeichen.');
 
             return response()->json(['message' => 'Not Found'], Response::HTTP_NOT_FOUND);
         }
