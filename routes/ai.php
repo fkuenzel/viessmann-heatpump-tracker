@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\AuthenticateMcpToken;
 use App\Mcp\Servers\HeatpumpServer;
+use App\Mcp\Servers\HeatpumpWriteServer;
 use Laravel\Mcp\Facades\Mcp;
 
 /*
@@ -21,3 +22,10 @@ use Laravel\Mcp\Facades\Mcp;
 Mcp::web('/mcp', HeatpumpServer::class)
     ->middleware(['throttle:mcp', AuthenticateMcpToken::class])
     ->name('mcp.heatpump');
+
+// Schreibender Endpoint: eigener Token, eigenes (strengeres) Rate-Limit,
+// jede Aenderung wird in mcp_audit_log protokolliert. Es gibt keine Tools,
+// die die Waermepumpe steuern oder Zugangsdaten lesen/schreiben.
+Mcp::web('/mcp/write', HeatpumpWriteServer::class)
+    ->middleware(['throttle:mcp-write', AuthenticateMcpToken::class . ':write'])
+    ->name('mcp.heatpump.write');

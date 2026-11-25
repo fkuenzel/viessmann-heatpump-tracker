@@ -4,11 +4,19 @@ namespace App\Mcp\Servers;
 
 use App\Mcp\Tools\CheckAnomalies;
 use App\Mcp\Tools\GetAnnotations;
+use App\Mcp\Tools\GetChangeImpact;
 use App\Mcp\Tools\GetCompressorStats;
 use App\Mcp\Tools\GetCopTrend;
+use App\Mcp\Tools\GetCostOutlook;
 use App\Mcp\Tools\GetCurrentStatus;
+use App\Mcp\Tools\GetDataQuality;
 use App\Mcp\Tools\GetDailySummary;
 use App\Mcp\Tools\GetIntervalBreakdown;
+use App\Mcp\Tools\GetMeterReadings;
+use App\Mcp\Tools\GetPeriodReport;
+use App\Mcp\Tools\GetSettings;
+use App\Mcp\Tools\GetTariffs;
+use App\Mcp\Tools\GetTemperatureEfficiency;
 use App\Mcp\Tools\GetWeatherComparison;
 use Laravel\Mcp\Server;
 use Laravel\Mcp\Server\Attributes\Instructions;
@@ -24,7 +32,7 @@ use Laravel\Mcp\Server\Attributes\Version;
 #[Name('Viessmann Heatpump Tracker')]
 #[Version('1.2.1')]
 #[Instructions(<<<'TEXT'
-Dieser Server stellt die Messdaten einer Viessmann-Wärmepumpe rein lesend bereit (Stromverbrauch, thermische Energie, COP, Zählerstände, Kompressor, Wetter). Es gibt keine schreibenden Tools.
+Dieser Server stellt die Messdaten einer Viessmann-Wärmepumpe rein lesend bereit (Stromverbrauch, thermische Energie, COP, Zählerstände, Kompressor, Wetter, Heizstab, Tarife, Einstellungen). Dieser Endpoint hat keine schreibenden Tools.
 
 Wichtige Grundlagen für die Interpretation:
 - "App"-Werte stammen aus der Viessmann-API (entspricht der ViCare-App). "Real"- bzw. "Zähler"-Werte basieren auf den manuell erfassten Zählerständen (HT/NT). Der Korrekturfaktor ist Zählerverbrauch geteilt durch App-Verbrauch; die App liegt typischerweise einige Prozent unter dem Zähler. Reale Tageswerte sind eine Hochrechnung (App-Tageswert mal Korrekturfaktor des Ablese-Intervalls), echte Genauigkeit gibt es nur pro Ablese-Intervall.
@@ -33,11 +41,12 @@ Wichtige Grundlagen für die Interpretation:
 - COP = thermische Energie geteilt durch Stromverbrauch. Bei Ablese-Intervallen unter einem Tag ist der echte COP nicht aussagekräftig (reliable=false). Der erste Betriebstag nach der Inbetriebnahme ist üblicherweise ein Ausreißer (Erstbefüllung, initiales Aufheizen).
 - Alle Energiewerte in kWh, Temperaturen in °C, Daten im Format JJJJ-MM-TT, Zeitzone der Anlage (Europe/Berlin).
 - Kosten sind nur vorhanden, wenn ein Stromtarif hinterlegt ist; sonst null.
+- Zeitraum-Kennzahlen (get_period_report) folgen demselben Modell wie das Dashboard: App-Werte tagesgenau, Zählerwerte nur aus vollständig enthaltenen Ablese-Intervallen mit Abdeckung (coverage_label). Summen zweier Zeiträume nur vergleichen, wenn beide gleich lang und zu mindestens 80 Prozent belegt sind; sonst Tageswerte, COP und kWh je Heizgradtag (witterungsbereinigt) vergleichen.
 - Notizen (get_annotations) enthalten manuelle Einträge und automatisch erfasste Einstellungsänderungen (z. B. Heizkurve, Zeitprogramme). Bei auffälligen Verbrauchs- oder COP-Änderungen lohnt ein Blick darauf, ob kurz davor etwas an der Anlage geändert wurde.
 TEXT)]
 class HeatpumpServer extends Server
 {
-    protected array $tools = [
+    public const READ_TOOLS = [
         GetCurrentStatus::class,
         GetDailySummary::class,
         GetIntervalBreakdown::class,
@@ -46,5 +55,15 @@ class HeatpumpServer extends Server
         GetCompressorStats::class,
         GetWeatherComparison::class,
         GetAnnotations::class,
+        GetPeriodReport::class,
+        GetTemperatureEfficiency::class,
+        GetChangeImpact::class,
+        GetDataQuality::class,
+        GetCostOutlook::class,
+        GetMeterReadings::class,
+        GetTariffs::class,
+        GetSettings::class,
     ];
+
+    protected array $tools = self::READ_TOOLS;
 }
