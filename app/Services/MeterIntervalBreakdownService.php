@@ -54,10 +54,8 @@ class MeterIntervalBreakdownService
      */
     public function intervalEndReadings(?Carbon $from = null, ?Carbon $to = null): Collection
     {
-        $firstId = MeterReading::query()->orderBy('timestamp')->value('id');
-
         return MeterReading::query()
-            ->when($firstId, fn ($query) => $query->where('id', '!=', $firstId))
+            ->intervalEnds()
             ->when($from, fn ($query) => $query->where('timestamp', '>=', $from->copy()->startOfDay()))
             ->when($to, fn ($query) => $query->where('timestamp', '<=', $to->copy()->endOfDay()))
             ->orderBy('timestamp')
@@ -89,6 +87,7 @@ class MeterIntervalBreakdownService
      *     dhw_cost: ?float,
      *     tariff_changed_during_interval: ?bool,
      *     reliable: ?bool,
+     *     estimated: ?bool,
      * }
      */
     public function breakdown(MeterReading $record): array
@@ -117,6 +116,7 @@ class MeterIntervalBreakdownService
             'dhw_cost' => null,
             'tariff_changed_during_interval' => null,
             'reliable' => null,
+            'estimated' => null,
         ];
 
         $previous = $this->previousReading($record);
@@ -124,6 +124,8 @@ class MeterIntervalBreakdownService
         if (! $previous) {
             return $empty;
         }
+
+        $estimated = MeterReading::pairInvolvesEstimate($previous, $record);
 
         $result = $this->correction->calculate($previous, $record);
         $meterKwh = $result['meter_kwh'];
@@ -200,7 +202,9 @@ class MeterIntervalBreakdownService
             'heating_cost' => $heatingCost,
             'dhw_cost' => $dhwCost,
             'tariff_changed_during_interval' => $costResult['tariff_changed_during_interval'],
-            'reliable' => $durationDaysRaw >= self::MIN_RELIABLE_INTERVAL_DAYS,
+            // Schaetzwerte (Grund "Schaetzwert") machen das Intervall nie belastbar.
+            'reliable' => $durationDaysRaw >= self::MIN_RELIABLE_INTERVAL_DAYS && ! $estimated,
+            'estimated' => $estimated,
         ];
     }
 
@@ -237,31 +241,12 @@ class MeterIntervalBreakdownService
     }
 
     /**
-     * Thermische Energie (Heizen + Warmwasser) über das Intervall, als
-     * einfache Tagessumme wie in CopCalculationService::forRange() - keine
-     * Rand-Intervall-Gewichtung, da Thermik ohnehin als "24 Std. Messung"
-     * pro Kalendertag geführt wird (Fahrplan Abschnitt 4.10/4.16).
+     * Thermische Energie (Heizen + Warmwasser) über das Intervall mit
+     * derselben Rand-Gewichtung wie der Strom (ApiLogAggregationService::
+     * weightedThermalSum()), damit der COP konsistent berechnet wird.
      */
     private function thermalSum(Carbon $from, Carbon $to): ?float
     {
-        $sum = 0.0;
-        $hasValue = false;
-
-        $cursor = $from->copy()->startOfDay();
-        $lastDay = $to->copy()->startOfDay();
-
-        while ($cursor->lessThanOrEqualTo($lastDay)) {
-            $heating = $this->aggregation->lastSnapshotValue($cursor, 'thermal_heating_kwh');
-            $dhw = $this->aggregation->lastSnapshotValue($cursor, 'thermal_dhw_kwh');
-
-            if ($heating !== null || $dhw !== null) {
-                $sum += ($heating ?? 0) + ($dhw ?? 0);
-                $hasValue = true;
-            }
-
-            $cursor->addDay();
-        }
-
-        return $hasValue ? $sum : null;
+        return $this->aggregation->weightedThermalSum($from, $to)['value'];
     }
 }

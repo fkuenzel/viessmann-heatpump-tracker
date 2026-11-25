@@ -64,6 +64,9 @@ class SettingsPage extends Page
     {
         $this->form->fill([
             'meter_number' => Setting::get('meter_number'),
+            'billing_year_start' => Setting::get('billing_year_start'),
+            'plan_kwh' => Setting::get('plan_kwh'),
+            'advance_monthly_eur' => Setting::get('advance_monthly_eur'),
             'forecast_horizon_days' => (int) Setting::get('forecast_horizon_days', 3),
             'weather_location_name' => Setting::get('weather_location_name'),
             'mail_recipient' => Setting::get('mail_recipient'),
@@ -89,6 +92,23 @@ class SettingsPage extends Page
                     ->minValue(1)
                     ->maxValue(16)
                     ->required(),
+                Section::make('Abrechnung und Plan')
+                    ->description('Grundlage der Auswertung "Kosten und Jahresprognose".')
+                    ->schema([
+                        \Filament\Forms\Components\DatePicker::make('billing_year_start')
+                            ->label('Beginn Abrechnungsjahr')
+                            ->native(false)
+                            ->displayFormat('d.m.Y'),
+                        TextInput::make('plan_kwh')
+                            ->label('Geplanter Jahresverbrauch (kWh)')
+                            ->numeric()
+                            ->minValue(0),
+                        TextInput::make('advance_monthly_eur')
+                            ->label('Monatlicher Abschlag (€)')
+                            ->numeric()
+                            ->minValue(0),
+                    ])
+                    ->columns(3),
                 Section::make('Wetter-Standort')
                     ->description('Standort für Außentemperatur/-prognose und den Temperaturvergleich. Ortsname eingeben - die Koordinaten werden beim Speichern automatisch über Open-Meteo ermittelt. Ohne Standort bleiben die Seite "Wetterdaten" und die davon abhängigen Anzeigen ausgeblendet.')
                     ->schema([
@@ -160,6 +180,9 @@ class SettingsPage extends Page
 
         Setting::set('meter_number', $data['meter_number']);
         Setting::set('forecast_horizon_days', $data['forecast_horizon_days']);
+        Setting::set('billing_year_start', $data['billing_year_start'] ?? null);
+        Setting::set('plan_kwh', $data['plan_kwh'] ?? null);
+        Setting::set('advance_monthly_eur', $data['advance_monthly_eur'] ?? null);
         Setting::set('mail_recipient', $data['mail_recipient']);
         Setting::set('report_frequency', $data['report_frequency']);
         Setting::set('anomaly_threshold_percent', $data['anomaly_threshold_percent']);

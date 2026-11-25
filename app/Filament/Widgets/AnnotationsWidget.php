@@ -18,7 +18,7 @@ class AnnotationsWidget extends TableWidget
     // Sort-Reihenfolge der Dashboard-Widgets explizit festgelegt statt dem
     // alphabetischen discoverWidgets()-Zufall ueberlassen (Fabian 29.10.2026
     // - die Breakdown-Tabelle landete sonst zwischen den Charts statt danach).
-    protected static ?int $sort = 1;
+    protected static ?int $sort = 2;
 
     protected int | string | array $columnSpan = 'full';
 

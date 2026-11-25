@@ -99,13 +99,13 @@ class TotalConsumptionChartWidget extends ChartWidget
             return $this->averagesCache;
         }
 
-        $days = (int) ($this->pageFilters['days'] ?? 30);
+        $period = \App\Support\ReportPeriodFilters::resolve($this->pageFilters);
         $aggregation = app(ApiLogAggregationService::class);
 
-        $currentFrom = now()->subDays($days)->startOfDay();
-        $currentTo = now()->subDay()->startOfDay();
-        $previousFrom = $currentFrom->copy()->subDays($days);
-        $previousTo = $currentFrom->copy()->subDay();
+        $currentFrom = $period->from->copy();
+        $currentTo = $period->chartTo();
+        $previousFrom = $period->comparisonFrom();
+        $previousTo = $period->comparisonTo();
 
         return $this->averagesCache = [
             'current' => $this->periodAverage($this->dailyValues($aggregation, $currentFrom, $currentTo)),
@@ -131,7 +131,7 @@ class TotalConsumptionChartWidget extends ChartWidget
 
     protected function getData(): array
     {
-        $days = (int) ($this->pageFilters['days'] ?? 30);
+        $period = \App\Support\ReportPeriodFilters::resolve($this->pageFilters);
         $aggregation = app(ApiLogAggregationService::class);
         $correction = app(MeterCorrectionService::class);
         $intervals = $correction->intervalFactors();
@@ -141,8 +141,8 @@ class TotalConsumptionChartWidget extends ChartWidget
         $real = [];
         $today = [];
 
-        $requestedStart = now()->subDays($days)->startOfDay();
-        $lastDay = now()->subDay()->startOfDay();
+        $requestedStart = $period->from->copy();
+        $lastDay = $period->chartTo();
 
         $earliest = $aggregation->earliestReferenceDate(['power_total_kwh']);
         $cursor = ($earliest && $earliest->greaterThan($requestedStart) && $earliest->lessThanOrEqualTo($lastDay))
@@ -168,11 +168,13 @@ class TotalConsumptionChartWidget extends ChartWidget
         // Datenpunkt im Verlauf wirkt. showLine:false verhindert eine
         // Verbindungslinie, spanGaps:false (schon global gesetzt) verhindert
         // sie zusaetzlich zum Vortag - der Punkt bleibt isoliert.
-        $todayDate = now()->startOfDay();
-        $labels[] = $todayDate->format('d.m.') . ' (heute)';
-        $app[] = null;
-        $real[] = null;
-        $today[] = $aggregation->dailyPowerValue($todayDate, 'power_total_kwh');
+        if ($period->includesToday()) {
+            $todayDate = now()->startOfDay();
+            $labels[] = $todayDate->format('d.m.') . ' (heute)';
+            $app[] = null;
+            $real[] = null;
+            $today[] = $aggregation->dailyPowerValue($todayDate, 'power_total_kwh');
+        }
 
         return [
             'datasets' => [

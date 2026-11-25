@@ -40,6 +40,8 @@ use Illuminate\Contracts\Support\Htmlable;
  */
 class MeterDeviationPercentChartWidget extends ChartWidget
 {
+    use \Filament\Widgets\Concerns\InteractsWithPageFilters;
+
     protected static ?int $sort = 19;
 
     protected ?string $heading = 'Abweichung Zähler ↔ App';
@@ -89,16 +91,11 @@ class MeterDeviationPercentChartWidget extends ChartWidget
         $this->averageComputed = true;
 
         $correction = app(MeterCorrectionService::class);
-        $readings = MeterReading::query()->orderBy('timestamp')->get();
+        $pairs = MeterReading::intervalPairs(\App\Support\ReportPeriodFilters::resolve($this->pageFilters));
 
         $values = [];
 
-        foreach ($readings as $index => $reading) {
-            if ($index === 0) {
-                continue;
-            }
-
-            $previous = $readings[$index - 1];
+        foreach ($pairs as [$previous, $reading]) {
             $result = $correction->calculate($previous, $reading);
 
             if ($result['api_kwh'] !== null && $result['meter_kwh'] > 0) {
@@ -113,18 +110,13 @@ class MeterDeviationPercentChartWidget extends ChartWidget
     {
         $correction = app(MeterCorrectionService::class);
 
-        $readings = MeterReading::query()->orderBy('timestamp')->get();
+        $pairs = MeterReading::intervalPairs(\App\Support\ReportPeriodFilters::resolve($this->pageFilters));
 
         $labels = [];
         $deviationValues = [];
         $this->intervalDurations = [];
 
-        foreach ($readings as $index => $reading) {
-            if ($index === 0) {
-                continue;
-            }
-
-            $previous = $readings[$index - 1];
+        foreach ($pairs as [$previous, $reading]) {
             $result = $correction->calculate($previous, $reading);
 
             $labels[] = $previous->timestamp->format('d.m.') . ' - ' . $reading->timestamp->format('d.m.');

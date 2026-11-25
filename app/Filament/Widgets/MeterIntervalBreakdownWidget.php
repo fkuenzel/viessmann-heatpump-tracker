@@ -32,6 +32,8 @@ use Filament\Widgets\TableWidget;
  */
 class MeterIntervalBreakdownWidget extends TableWidget
 {
+    use \Filament\Widgets\Concerns\InteractsWithPageFilters;
+
     protected static ?int $sort = 20;
 
     protected int | string | array $columnSpan = 'full';
@@ -48,12 +50,10 @@ class MeterIntervalBreakdownWidget extends TableWidget
 
     public function table(Table $table): Table
     {
-        $firstId = MeterReading::query()->orderBy('timestamp')->value('id');
-
         return $table
             ->query(
                 MeterReading::query()
-                    ->when($firstId, fn ($query) => $query->where('id', '!=', $firstId))
+                    ->whereIn('id', MeterReading::intervalPairs(\App\Support\ReportPeriodFilters::resolve($this->pageFilters))->map(fn (array $pair) => $pair[1]->id)->all())
                     ->orderByDesc('timestamp')
             )
             ->columns([

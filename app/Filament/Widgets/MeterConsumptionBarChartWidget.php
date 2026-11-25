@@ -49,6 +49,8 @@ use Illuminate\Contracts\Support\Htmlable;
  */
 class MeterConsumptionBarChartWidget extends ChartWidget
 {
+    use \Filament\Widgets\Concerns\InteractsWithPageFilters;
+
     protected static ?int $sort = 18;
 
     protected ?string $heading = 'Verbrauch je Ablese-Intervall';
@@ -113,18 +115,13 @@ class MeterConsumptionBarChartWidget extends ChartWidget
         }
 
         $correction = app(MeterCorrectionService::class);
-        $readings = MeterReading::query()->orderBy('timestamp')->get();
+        $pairs = MeterReading::intervalPairs(\App\Support\ReportPeriodFilters::resolve($this->pageFilters));
 
         $meterTotal = 0.0;
         $appTotal = 0.0;
         $daysTotal = 0.0;
 
-        foreach ($readings as $index => $reading) {
-            if ($index === 0) {
-                continue;
-            }
-
-            $previous = $readings[$index - 1];
+        foreach ($pairs as [$previous, $reading]) {
             $result = $correction->calculate($previous, $reading);
             $days = $previous->timestamp->diffInSeconds($reading->timestamp) / 86400;
 
@@ -143,19 +140,14 @@ class MeterConsumptionBarChartWidget extends ChartWidget
     {
         $correction = app(MeterCorrectionService::class);
 
-        $readings = MeterReading::query()->orderBy('timestamp')->get();
+        $pairs = MeterReading::intervalPairs(\App\Support\ReportPeriodFilters::resolve($this->pageFilters));
 
         $labels = [];
         $meterValues = [];
         $apiValues = [];
         $this->intervalDurations = [];
 
-        foreach ($readings as $index => $reading) {
-            if ($index === 0) {
-                continue;
-            }
-
-            $previous = $readings[$index - 1];
+        foreach ($pairs as [$previous, $reading]) {
             $result = $correction->calculate($previous, $reading);
 
             $labels[] = $previous->timestamp->format('d.m.') . ' - ' . $reading->timestamp->format('d.m.');

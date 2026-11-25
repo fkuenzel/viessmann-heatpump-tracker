@@ -2,11 +2,11 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Support\PeriodFilterForm;
 use App\Services\ViessmannApiClient;
 use App\Services\ViessmannSyncService;
 use App\Services\WeatherSyncService;
 use Filament\Actions\Action;
-use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Pages\Dashboard as BaseDashboard;
 use Filament\Pages\Dashboard\Concerns\HasFiltersForm;
@@ -36,18 +36,7 @@ class Dashboard extends BaseDashboard
 
     public function filtersForm(Schema $schema): Schema
     {
-        return $schema
-            ->components([
-                Select::make('days')
-                    ->label('Zeitraum')
-                    ->options([
-                        '7' => 'Letzte 7 Tage',
-                        '30' => 'Letzte 30 Tage',
-                        '90' => 'Letzte 90 Tage',
-                    ])
-                    ->default('30')
-                    ->selectablePlaceholder(false),
-            ]);
+        return $schema->components([PeriodFilterForm::section()]);
     }
 
     /**

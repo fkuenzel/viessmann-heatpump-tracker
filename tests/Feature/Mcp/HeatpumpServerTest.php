@@ -5,6 +5,14 @@ namespace Tests\Feature\Mcp;
 use App\Mcp\Servers\HeatpumpServer;
 use App\Mcp\Tools\CheckAnomalies;
 use App\Mcp\Tools\GetAnnotations;
+use App\Mcp\Tools\GetChangeImpact;
+use App\Mcp\Tools\GetCostOutlook;
+use App\Mcp\Tools\GetDataQuality;
+use App\Mcp\Tools\GetMeterReadings;
+use App\Mcp\Tools\GetPeriodReport;
+use App\Mcp\Tools\GetSettings;
+use App\Mcp\Tools\GetTariffs;
+use App\Mcp\Tools\GetTemperatureEfficiency;
 use App\Mcp\Tools\GetCompressorStats;
 use App\Mcp\Tools\GetCopTrend;
 use App\Mcp\Tools\GetCurrentStatus;
@@ -28,6 +36,14 @@ class HeatpumpServerTest extends McpTestCase
             'get_compressor_stats' => GetCompressorStats::class,
             'get_weather_comparison' => GetWeatherComparison::class,
             'get_annotations' => GetAnnotations::class,
+            'get_period_report' => GetPeriodReport::class,
+            'get_temperature_efficiency' => GetTemperatureEfficiency::class,
+            'get_change_impact' => GetChangeImpact::class,
+            'get_data_quality' => GetDataQuality::class,
+            'get_cost_outlook' => GetCostOutlook::class,
+            'get_meter_readings' => GetMeterReadings::class,
+            'get_tariffs' => GetTariffs::class,
+            'get_settings' => GetSettings::class,
         ];
     }
 
@@ -56,6 +72,11 @@ class HeatpumpServerTest extends McpTestCase
     public function test_every_tool_runs_on_an_empty_database_without_errors(): void
     {
         foreach ($this->expectedTools() as $class) {
+            if ($class === GetChangeImpact::class) {
+                // Pflichtparameter "at", siehe GetChangeImpactTest.
+                continue;
+            }
+
             if ($class === GetWeatherComparison::class) {
                 // Ohne Wetter-Standort liefert dieses Tool bewusst eine
                 // verständliche Fehlermeldung, siehe GetWeatherComparisonTest.

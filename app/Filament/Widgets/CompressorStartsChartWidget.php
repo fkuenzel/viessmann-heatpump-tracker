@@ -76,13 +76,13 @@ class CompressorStartsChartWidget extends ChartWidget
             return $this->averagesCache;
         }
 
-        $days = (int) ($this->pageFilters['days'] ?? 30);
+        $period = \App\Support\ReportPeriodFilters::resolve($this->pageFilters);
         $aggregation = app(ApiLogAggregationService::class);
 
-        $currentFrom = now()->subDays($days)->startOfDay();
-        $currentTo = now()->subDay()->startOfDay();
-        $previousFrom = $currentFrom->copy()->subDays($days);
-        $previousTo = $currentFrom->copy()->subDay();
+        $currentFrom = $period->from->copy();
+        $currentTo = $period->chartTo();
+        $previousFrom = $period->comparisonFrom();
+        $previousTo = $period->comparisonTo();
 
         return $this->averagesCache = [
             'current' => $this->periodAverage($this->dailyValues($aggregation, $currentFrom, $currentTo)),
@@ -120,15 +120,15 @@ class CompressorStartsChartWidget extends ChartWidget
 
     protected function getData(): array
     {
-        $days = (int) ($this->pageFilters['days'] ?? 30);
+        $period = \App\Support\ReportPeriodFilters::resolve($this->pageFilters);
         $aggregation = app(ApiLogAggregationService::class);
 
         $labels = [];
         $starts = [];
         $today = [];
 
-        $requestedStart = now()->subDays($days)->startOfDay();
-        $lastDay = now()->subDay()->startOfDay();
+        $requestedStart = $period->from->copy();
+        $lastDay = $period->chartTo();
 
         $earliest = $aggregation->earliestReferenceDate(['compressor_starts']);
         $cursor = ($earliest && $earliest->greaterThan($requestedStart) && $earliest->lessThanOrEqualTo($lastDay))
@@ -146,10 +146,12 @@ class CompressorStartsChartWidget extends ChartWidget
 
         // Laufender Tag als abgesetzter Punkt - siehe
         // TotalConsumptionChartWidget-Docblock fuer die Begruendung.
-        $todayDate = now()->startOfDay();
-        $labels[] = $todayDate->format('d.m.') . ' (heute)';
-        $starts[] = null;
-        $today[] = $this->deltaForDate($aggregation, $todayDate);
+        if ($period->includesToday()) {
+            $todayDate = now()->startOfDay();
+            $labels[] = $todayDate->format('d.m.') . ' (heute)';
+            $starts[] = null;
+            $today[] = $this->deltaForDate($aggregation, $todayDate);
+        }
 
         return [
             'datasets' => [

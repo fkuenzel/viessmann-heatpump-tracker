@@ -65,13 +65,13 @@ class DhwConsumptionChartWidget extends ChartWidget
             return $this->averagesCache;
         }
 
-        $days = (int) ($this->pageFilters['days'] ?? 30);
+        $period = \App\Support\ReportPeriodFilters::resolve($this->pageFilters);
         $aggregation = app(ApiLogAggregationService::class);
 
-        $currentFrom = now()->subDays($days)->startOfDay();
-        $currentTo = now()->subDay()->startOfDay();
-        $previousFrom = $currentFrom->copy()->subDays($days);
-        $previousTo = $currentFrom->copy()->subDay();
+        $currentFrom = $period->from->copy();
+        $currentTo = $period->chartTo();
+        $previousFrom = $period->comparisonFrom();
+        $previousTo = $period->comparisonTo();
 
         return $this->averagesCache = [
             'current' => $this->periodAverage($this->dailyValues($aggregation, $currentFrom, $currentTo)),
@@ -97,7 +97,7 @@ class DhwConsumptionChartWidget extends ChartWidget
 
     protected function getData(): array
     {
-        $days = (int) ($this->pageFilters['days'] ?? 30);
+        $period = \App\Support\ReportPeriodFilters::resolve($this->pageFilters);
         $aggregation = app(ApiLogAggregationService::class);
         $correction = app(MeterCorrectionService::class);
         $intervals = $correction->intervalFactors();
@@ -107,8 +107,8 @@ class DhwConsumptionChartWidget extends ChartWidget
         $real = [];
         $today = [];
 
-        $requestedStart = now()->subDays($days)->startOfDay();
-        $lastDay = now()->subDay()->startOfDay();
+        $requestedStart = $period->from->copy();
+        $lastDay = $period->chartTo();
 
         $earliest = $aggregation->earliestReferenceDate(['power_dhw_kwh']);
         $cursor = ($earliest && $earliest->greaterThan($requestedStart) && $earliest->lessThanOrEqualTo($lastDay))
@@ -130,11 +130,13 @@ class DhwConsumptionChartWidget extends ChartWidget
 
         // Laufender Tag als abgesetzter Punkt - siehe
         // TotalConsumptionChartWidget-Docblock fuer die Begruendung.
-        $todayDate = now()->startOfDay();
-        $labels[] = $todayDate->format('d.m.') . ' (heute)';
-        $app[] = null;
-        $real[] = null;
-        $today[] = $aggregation->dailyPowerValue($todayDate, 'power_dhw_kwh');
+        if ($period->includesToday()) {
+            $todayDate = now()->startOfDay();
+            $labels[] = $todayDate->format('d.m.') . ' (heute)';
+            $app[] = null;
+            $real[] = null;
+            $today[] = $aggregation->dailyPowerValue($todayDate, 'power_dhw_kwh');
+        }
 
         return [
             'datasets' => [
