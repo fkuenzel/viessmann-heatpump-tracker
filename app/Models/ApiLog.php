@@ -7,6 +7,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class ApiLog extends Model
 {
+    protected static function booted(): void
+    {
+        // Der Aggregationsservice haelt api_log pro Request im Speicher
+        // (Index nach Referenzdatum); bei jeder Aenderung verwerfen.
+        $flush = fn () => app(\App\Services\ApiLogAggregationService::class)->flush();
+
+        static::saved($flush);
+        static::deleted($flush);
+    }
+
     use HasFactory;
 
     protected $table = 'api_log';
