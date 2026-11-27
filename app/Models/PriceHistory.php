@@ -11,6 +11,14 @@ class PriceHistory extends Model
 
     protected $table = 'price_history';
 
+    protected static function booted(): void
+    {
+        $flush = fn () => app(\App\Services\TariffLookup::class)->flush();
+
+        static::saved($flush);
+        static::deleted($flush);
+    }
+
     protected $fillable = [
         'valid_from',
         'provider_name',
@@ -36,8 +44,6 @@ class PriceHistory extends Model
      */
     public static function validAt(\DateTimeInterface $date): ?self
     {
-        return static::where('valid_from', '<=', $date)
-            ->orderByDesc('valid_from')
-            ->first();
+        return app(\App\Services\TariffLookup::class)->validAt($date);
     }
 }

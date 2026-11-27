@@ -110,17 +110,17 @@ class MeterIntervalBreakdownWidget extends TableWidget
                 TextColumn::make('total_cost')
                     ->label('Kosten Gesamt (€)')
                     ->wrapHeader()
-                    ->visible(fn () => PriceHistory::query()->exists())
+                    ->visible(fn () => app(\App\Services\TariffLookup::class)->any())
                     ->state(fn (MeterReading $record) => $this->formatEuro($this->breakdown($record)['total_cost'])),
                 TextColumn::make('heating_cost')
                     ->label('Kosten Heizen (€)')
                     ->wrapHeader()
-                    ->visible(fn () => PriceHistory::query()->exists())
+                    ->visible(fn () => app(\App\Services\TariffLookup::class)->any())
                     ->state(fn (MeterReading $record) => $this->formatEuro($this->breakdown($record)['heating_cost'])),
                 TextColumn::make('dhw_cost')
                     ->label('Kosten WW (€)')
                     ->wrapHeader()
-                    ->visible(fn () => PriceHistory::query()->exists())
+                    ->visible(fn () => app(\App\Services\TariffLookup::class)->any())
                     ->state(fn (MeterReading $record) => $this->formatEuro($this->breakdown($record)['dhw_cost'])),
                 TextColumn::make('thermal_kwh')
                     ->label('Thermische Energie (kWh)')

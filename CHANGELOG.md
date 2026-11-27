@@ -4,6 +4,7 @@
 
 ### Performance
 - Behebt die starke Verlangsamung von Dashboard und Auswertungen in 2.0.0: Die Tageswerte wurden je Tag und Kennzahl einzeln aus `api_log` abgefragt (30-Tage-Bericht mit Vergleich: über 1.190 Abfragen, rund 6 Sekunden). Die Daten werden jetzt einmal pro Request geladen, nach Referenzdatum indiziert und im Speicher aufgelöst (59 Abfragen, rund 22 Millisekunden). Der Index wird beim Speichern oder Löschen eines Eintrags verworfen.
+- Tarife (`price_history`) und Wetter-Tagesmittel (`weather_log`) werden pro Request einmal geladen und im Speicher aufgelöst, statt je Tag bzw. Ablese-Intervall abgefragt zu werden. Kostenprognose: 358 auf 10 Abfragen, Periodenvergleich: 118 auf 4, KPI-Widgets: 59 auf 2. Beide Bestände werden beim Speichern oder Löschen verworfen.
 - Bei identischem Zeitstempel gewinnt deterministisch der Eintrag mit der höheren ID.
 - Neue Regressionstests begrenzen die Zahl der `api_log`-Abfragen und prüfen Invalidierung sowie gemeinsame Nutzung des Index.
 

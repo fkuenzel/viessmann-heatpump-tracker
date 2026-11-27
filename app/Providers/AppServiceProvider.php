@@ -17,6 +17,8 @@ class AppServiceProvider extends ServiceProvider
         // Pro Request (bzw. Livewire-Aufruf) ein gemeinsamer Aggregationsservice,
         // damit alle Widgets denselben im Speicher gehaltenen api_log-Index nutzen.
         $this->app->scoped(\App\Services\ApiLogAggregationService::class);
+        $this->app->scoped(\App\Services\PeriodReportService::class);
+        $this->app->scoped(\App\Services\TariffLookup::class);
 
         //
     }
