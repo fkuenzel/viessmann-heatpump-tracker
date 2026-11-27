@@ -7,6 +7,15 @@ use Illuminate\Database\Eloquent\Model;
 
 class WeatherLog extends Model
 {
+    protected static function booted(): void
+    {
+        // Tagesmittel werden pro Request im PeriodReportService vorgehalten.
+        $flush = fn () => app(\App\Services\PeriodReportService::class)->flush();
+
+        static::saved($flush);
+        static::deleted($flush);
+    }
+
     use HasFactory;
 
     protected $table = 'weather_log';

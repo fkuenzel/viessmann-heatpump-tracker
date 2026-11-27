@@ -304,7 +304,7 @@ class PeriodReportService
             'intervals' => $intervals,
             'estimated_intervals' => $estimated,
             'tariff_changed_during_interval' => $tariffChanged,
-            'has_tariff' => PriceHistory::query()->exists(),
+            'has_tariff' => app(TariffLookup::class)->any(),
         ];
     }
 
@@ -316,11 +316,31 @@ class PeriodReportService
             return $plant;
         }
 
-        $day = WeatherLog::query()
-            ->whereBetween('timestamp', [$date->copy()->startOfDay(), $date->copy()->endOfDay()])
-            ->avg('temperature');
+        return $this->weatherDays()[$date->toDateString()] ?? null;
+    }
 
-        return $day !== null ? (float) $day : null;
+    /** @var array<string, float>|null Datum => Tagesmittel aus weather_log */
+    private ?array $weatherDays = null;
+
+    public function flush(): void
+    {
+        $this->weatherDays = null;
+    }
+
+    /**
+     * Tagesmittel der Wetterdaten in einer einzigen Abfrage (statt je Tag eine).
+     *
+     * @return array<string, float>
+     */
+    private function weatherDays(): array
+    {
+        return $this->weatherDays ??= WeatherLog::query()
+            ->whereNotNull('temperature')
+            ->selectRaw('substr(timestamp, 1, 10) as day, avg(temperature) as avg_temperature')
+            ->groupBy('day')
+            ->pluck('avg_temperature', 'day')
+            ->map(fn ($value): float => (float) $value)
+            ->all();
     }
 
     /**

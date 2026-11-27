@@ -37,10 +37,7 @@ class CostCalculationService
 
         $tariff = PriceHistory::validAt($to->timestamp);
 
-        $tariffChangedDuringInterval = PriceHistory::query()
-            ->where('valid_from', '>', $from->timestamp)
-            ->where('valid_from', '<=', $to->timestamp)
-            ->exists();
+        $tariffChangedDuringInterval = app(TariffLookup::class)->changedBetween($from->timestamp, $to->timestamp);
 
         if (! $tariff) {
             return [
