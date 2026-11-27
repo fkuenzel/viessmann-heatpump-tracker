@@ -107,19 +107,71 @@ class ApiLogAggregationService
         return $this->resolvedRowForDate($date, $column)?->timestamp;
     }
 
-    private function resolvedRowForDate(Carbon $date, string $column): ?ApiLog
+    /**
+     * Spalten, die der Aggregationsservice aus api_log liest. Alle Tageswerte
+     * eines Requests werden aus einem einmal geladenen, im Speicher nach
+     * Referenzdatum indizierten Abzug aufgeloest (statt je Tag und Spalte eine
+     * eigene Abfrage - ein 30-Tage-Bericht brauchte vorher ueber 1.000
+     * Abfragen). Der Index wird beim Speichern/Loeschen eines ApiLog-Eintrags
+     * verworfen (siehe ApiLog::booted()).
+     */
+    private const INDEXED_COLUMNS = [
+        'power_total_kwh', 'power_heating_kwh', 'power_dhw_kwh',
+        'thermal_heating_kwh', 'thermal_dhw_kwh', 'outdoor_temp',
+        'compressor_starts', 'compressor_hours',
+        'heating_rod_heating_kwh', 'heating_rod_dhw_kwh', 'heating_rod_starts', 'heating_rod_hours',
+    ];
+
+    /** @var array<string, array<int, \stdClass>>|null Referenzdatum => Zeilen, neueste zuerst */
+    private ?array $index = null;
+
+    public function flush(): void
     {
-        $date = $date->copy()->startOfDay();
+        $this->index = null;
+    }
 
-        $rows = ApiLog::query()
-            ->whereBetween('timestamp', [$date, $date->copy()->addDays(8)])
-            ->whereNotNull($column)
+    /**
+     * @return array<string, array<int, \stdClass>>
+     */
+    private function index(): array
+    {
+        if ($this->index !== null) {
+            return $this->index;
+        }
+
+        $existing = \Illuminate\Support\Facades\Schema::getColumnListing('api_log');
+        $columns = array_values(array_intersect(self::INDEXED_COLUMNS, $existing));
+
+        $rows = \Illuminate\Support\Facades\DB::table('api_log')
             ->orderByDesc('timestamp')
-            ->get(['timestamp', 'day_index', $column]);
+            ->orderByDesc('id') // deterministisch bei identischem Zeitstempel
+            ->get(['timestamp', 'day_index', ...$columns]);
 
-        return $rows->first(
-            fn (ApiLog $row) => $row->timestamp->copy()->startOfDay()->subDays($row->day_index)->equalTo($date)
-        );
+        $index = [];
+
+        foreach ($rows as $row) {
+            $timestamp = Carbon::parse($row->timestamp);
+            $row->timestamp = $timestamp;
+            $row->day_index = (int) $row->day_index;
+            $reference = $timestamp->copy()->startOfDay()->subDays($row->day_index)->toDateString();
+            $index[$reference][] = $row;
+        }
+
+        return $this->index = $index;
+    }
+
+    /**
+     * @return \stdClass|null Zeile mit timestamp (Carbon), day_index und den Spaltenwerten
+     */
+    private function resolvedRowForDate(Carbon $date, string $column): ?\stdClass
+    {
+        foreach ($this->index()[$date->toDateString()] ?? [] as $row) {
+            if (($row->{$column} ?? null) !== null) {
+                return $row;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -282,12 +334,9 @@ class ApiLogAggregationService
      */
     public function averageOutdoorTemp(Carbon $date): ?float
     {
-        $date = $date->copy()->startOfDay();
-
-        $values = ApiLog::query()
-            ->where('day_index', 0)
-            ->whereBetween('timestamp', [$date, $date->copy()->endOfDay()])
-            ->whereNotNull('outdoor_temp')
+        $values = collect($this->index()[$date->toDateString()] ?? [])
+            ->filter(fn (\stdClass $row): bool => $row->day_index === 0 && $row->outdoor_temp !== null
+                && $row->timestamp->isSameDay($date))
             ->pluck('outdoor_temp');
 
         return $values->isEmpty() ? null : (float) $values->avg();

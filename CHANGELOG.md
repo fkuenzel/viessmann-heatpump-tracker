@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.1 (unveröffentlicht)
+
+### Performance
+- Behebt die starke Verlangsamung von Dashboard und Auswertungen in 2.0.0: Die Tageswerte wurden je Tag und Kennzahl einzeln aus `api_log` abgefragt (30-Tage-Bericht mit Vergleich: über 1.190 Abfragen, rund 6 Sekunden). Die Daten werden jetzt einmal pro Request geladen, nach Referenzdatum indiziert und im Speicher aufgelöst (59 Abfragen, rund 22 Millisekunden). Der Index wird beim Speichern oder Löschen eines Eintrags verworfen.
+- Bei identischem Zeitstempel gewinnt deterministisch der Eintrag mit der höheren ID.
+- Neue Regressionstests begrenzen die Zahl der `api_log`-Abfragen und prüfen Invalidierung sowie gemeinsame Nutzung des Index.
+
 ## 2.0.0 (2026-11)
 
 Großes Release in sechs Phasen. Alle Datenbank-Migrationen sind rein ergänzend, es werden keine bestehenden Daten verändert oder gelöscht.
